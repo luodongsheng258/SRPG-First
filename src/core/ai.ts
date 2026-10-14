@@ -48,6 +48,15 @@ const W_FOCUS_KILL = 500;
 const W_FOCUS_WOUND = 3;
 /** 集火目标评选：打得疼的优先（先解决威胁大的） */
 const W_FOCUS_THREAT = 4;
+/**
+ * "击破敌将"关卡里，敌将额外加的集火权重。
+ *
+ * 刻意比 `W_FOCUS_KILL`（500）还大：**本关的胜利条件就是它**，
+ * 所以哪怕这一下打不死、哪怕别人更好打，全队也该往它身上叠。
+ * 没有这条的话，AI 会照着"谁脆打谁"把敌人清光 —— 那也能赢（全灭是兜底条件），
+ * 但那就完全没在玩这一关的目标，模拟出来的胜率也就没有参考价值了。
+ */
+const W_FOCUS_OBJECTIVE = 800;
 
 interface AttackChoice {
   dest: Vec2;
@@ -94,6 +103,8 @@ export function pickFocusTarget(state: BattleState, team: Team): Unit | null {
   const mine = livingUnitsOf(state, team).filter((unit) => !unit.done);
   if (mine.length === 0) return null;
 
+  const objective = state.objective;
+
   let best: Unit | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
 
@@ -103,7 +114,12 @@ export function pickFocusTarget(state: BattleState, team: Team): Unit | null {
     for (const unit of mine) total += roughDamage(unit, foe);
     if (total <= 0) continue;
 
+    /* 这一关的目标就是它 —— 加权到压倒其他一切判据（见 W_FOCUS_OBJECTIVE） */
+    const isObjective =
+      objective.kind === 'defeat' && foe.defId === objective.defId;
+
     const score =
+      (isObjective ? W_FOCUS_OBJECTIVE : 0) +
       (total >= foe.hp ? W_FOCUS_KILL : 0) +
       (foe.maxHp - foe.hp) * W_FOCUS_WOUND +
       attackPower(foe) * W_FOCUS_THREAT;

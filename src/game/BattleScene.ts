@@ -1147,6 +1147,7 @@ export class BattleScene extends Phaser.Scene {
       turn: this.battle.turn,
       activeTeam: this.battle.activeTeam,
       phase: this.battle.phase,
+      objective: this.battle.objective,
       playerAlive: livingUnitsOf(this.battle, 'player').length,
       enemyAlive: livingUnitsOf(this.battle, 'enemy').length,
       selected,

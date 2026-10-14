@@ -2,9 +2,11 @@ import {
   attackPower,
   EXP_PER_LEVEL,
   MAX_LEVEL,
+  objectiveText,
   triangleLabel,
   type BattlePhase,
   type CombatForecast,
+  type Objective,
   type Team,
   type TerrainDef,
   type Unit,
@@ -28,6 +30,8 @@ export interface HudModel {
   turn: number;
   activeTeam: Team;
   phase: BattlePhase;
+  /** 本关的胜利条件，显示在回合数旁边 */
+  objective: Objective;
 
   playerAlive: number;
   enemyAlive: number;
@@ -234,6 +238,7 @@ export function createHud(): Hud {
 
   const turnEl = pick('turn');
   const phaseEl = pick('phase');
+  const objectiveEl = pick('objective');
   const playerCountEl = pick('player-count');
   const enemyCountEl = pick('enemy-count');
   const unitInfoEl = pick('unit-info');
@@ -271,6 +276,13 @@ export function createHud(): Hud {
 
       phaseEl.textContent = model.activeTeam === 'player' ? '我方行动' : '敌方行动';
       phaseEl.className = `v ${model.activeTeam}`;
+
+      /* 「守住 8 回合」还要带上进度，否则玩家不知道还剩几回合 */
+      objectiveEl.textContent =
+        model.objective.kind === 'survive'
+          ? `${objectiveText(model.objective)}（${Math.min(model.turn, model.objective.turns)} / ${model.objective.turns}）`
+          : objectiveText(model.objective);
+      objectiveEl.className = 'v';
 
       playerCountEl.textContent = String(model.playerAlive);
       enemyCountEl.textContent = String(model.enemyAlive);

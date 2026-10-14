@@ -161,12 +161,35 @@ export interface UnitSpawn {
   level?: number;
 }
 
+/**
+ * 关卡的胜利条件（见 docs/rules.md 7）。
+ *
+ * **全灭敌人永远是兜底胜利条件**，任何关卡都算 —— 打得比目标更彻底，没理由不算赢。
+ * 所以这里描述的其实是"除了全灭之外，还能怎么赢"。
+ */
+export type Objective =
+  /** 全灭对方。不写 objective 时的默认值 */
+  | { kind: 'rout' }
+  /**
+   * 击破指定兵种。按 `defId` 而不是具体单位 —— 地图里同一个兵种可能有好几个，
+   * 而且增援还可能再送一个来。语义是"**场上不再有这个兵种**"。
+   */
+  | { kind: 'defeat'; defId: string }
+  /**
+   * 守住 N 回合。`turn` 从 1 开始，所以判据是 `turn > turns`。
+   *
+   * 它还有个附带好处：**把对局长度硬性封顶**，从结构上杜绝这一关出现打不完的局。
+   */
+  | { kind: 'survive'; turns: number };
+
 /** 一个"关卡" = 地图 + 初始布阵 + 随机种子 */
 export interface Scenario {
   map: BattleMap;
   spawns: UnitSpawn[];
   /** 中途到场的敌人波次（见 docs/rules.md 6.5）。不写就是纯初始布阵 */
   reinforcements: ReinforcementSpawn[];
+  /** 胜利条件。不写就是"全灭对方" */
+  objective?: Objective;
   seed: number;
 }
 
@@ -216,5 +239,10 @@ export interface BattleState {
    * 单位在**开局就已经造好了**（见 `UnitBlueprint` 的说明）。
    */
   pendingReinforcements: PendingReinforcement[];
+  /**
+   * 本关的胜利条件。**放进 state 而不是留在 Scenario 里** ——
+   * `checkVictory(state)` 是纯函数，只能看 state。
+   */
+  objective: Objective;
   log: string[];
 }

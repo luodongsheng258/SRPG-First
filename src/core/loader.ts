@@ -6,6 +6,7 @@ import type {
   BattleMap,
   BattleState,
   Growths,
+  Objective,
   ReinforcementSpawn,
   Scenario,
   Team,
@@ -184,7 +185,46 @@ export function parseScenario(raw: unknown): Scenario {
   const seed = raw.seed === undefined ? 1 : num(raw.seed, 'seed');
   if (!Number.isInteger(seed)) throw new Error('seed 必须是整数');
 
-  return { map, spawns, reinforcements: parseReinforcements(raw.reinforcements), seed };
+  const reinforcements = parseReinforcements(raw.reinforcements);
+  const objective = parseObjective(raw.objective);
+
+  /* 击破目标的兵种必须在场 —— 打错字的话这一关的目标永远达不成，
+     而"全灭兜底"会让它看起来能通，于是这个错会一直藏着 */
+  if (objective?.kind === 'defeat') {
+    const appears =
+      spawns.some((s) => s.defId === objective.defId) ||
+      reinforcements.some((wave) => wave.spawns.some((s) => s.defId === objective.defId));
+    if (!appears) {
+      throw new Error(`objective.defId「${objective.defId}」在这张地图里根本没有出场`);
+    }
+  }
+
+  return { map, spawns, reinforcements, objective, seed };
+}
+
+/**
+ * 胜利条件（见 docs/rules.md 7）。不写 `objective` 就是"全灭对方"。
+ */
+function parseObjective(raw: unknown): Objective | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) throw new Error('objective 必须是对象');
+
+  const kind = str(raw.kind, 'objective.kind');
+  if (kind === 'rout') return { kind: 'rout' };
+
+  if (kind === 'defeat') {
+    return { kind: 'defeat', defId: str(raw.defId, 'objective.defId') };
+  }
+
+  if (kind === 'survive') {
+    const turns = num(raw.turns, 'objective.turns');
+    if (!Number.isInteger(turns) || turns < 1) {
+      throw new Error('objective.turns 必须是 >= 1 的整数');
+    }
+    return { kind: 'survive', turns };
+  }
+
+  throw new Error(`objective.kind 未知：${kind}（只支持 rout / defeat / survive）`);
 }
 
 /**

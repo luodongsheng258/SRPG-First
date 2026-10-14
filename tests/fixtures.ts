@@ -1,6 +1,7 @@
 import type {
   BattleMap,
   BattleState,
+  Objective,
   PendingReinforcement,
   Team,
   TerrainKind,
@@ -149,6 +150,8 @@ export function makeState(
     activeTeam?: Team;
     /** 待命增援。要测增援到场的用例自己传（见 reinforce.test.ts） */
     pendingReinforcements?: PendingReinforcement[];
+    /** 胜利条件。默认"全灭对方" */
+    objective?: Objective;
   } = {},
 ): BattleState {
   return {
@@ -160,6 +163,7 @@ export function makeState(
     rngSeed: options.seed ?? 12345,
     rngCursor: 0,
     pendingReinforcements: options.pendingReinforcements ?? [],
+    objective: options.objective ?? { kind: 'rout' },
     log: [],
   };
 }

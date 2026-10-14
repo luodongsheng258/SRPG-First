@@ -4,6 +4,7 @@
   "width": 12,
   "height": 9,
   "seed": 20260202,
+  "objective": { "kind": "defeat", "defId": "bandit-chief" },
   "terrain": [
     ["plain", "plain", "plain", "plain", "plain", "forest", "forest", "forest", "plain", "plain", "plain", "plain"],
     ["plain", "plain", "plain", "plain", "forest", "hill", "forest", "forest", "plain", "plain", "plain", "plain"],

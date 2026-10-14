@@ -2,7 +2,7 @@ import { canReach, resolveCombat } from './combat';
 import { key, samePos } from './grid';
 import { canStandAt, computeMoveRange } from './pathfind';
 import { requireUnit } from './state';
-import { canAct, checkVictory, endTurn } from './turn';
+import { canAct, checkVictory, endTurn, victoryText } from './turn';
 import type { BattleState, Unit, Vec2 } from './types';
 
 /**
@@ -53,7 +53,7 @@ function finalize(state: BattleState): BattleState {
   const phase = checkVictory(state);
   if (phase === state.phase) return state;
   const text =
-    phase === 'won' ? '★ 我方胜利——敌方全灭' : '✖ 我方全灭——战斗失败';
+    phase === 'won' ? victoryText(state.objective) : '✖ 我方全灭——战斗失败';
   return { ...state, phase, log: [...state.log, text] };
 }
 

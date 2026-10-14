@@ -2,7 +2,7 @@ import { key, terrainAt } from './grid';
 import { computeZoc } from './pathfind';
 import { arriveReinforcements } from './reinforce';
 import { livingUnitsOf } from './state';
-import type { BattlePhase, BattleState, Team, Unit } from './types';
+import type { BattlePhase, BattleState, Objective, Team, Unit } from './types';
 import { opponent, teamLabel } from './util';
 
 /**
@@ -13,10 +13,54 @@ import { opponent, teamLabel } from './util';
  * `state.turn` 只在"敌方阶段结束、切回我方"时 +1。
  */
 
+/**
+ * 判定胜负（见 docs/rules.md 7）。
+ *
+ * **"全灭敌人"是所有关卡的兜底胜利条件** —— 打得比目标更彻底，没理由不算赢。
+ * 于是 `objective` 实际上描述的是"除了全灭之外，还能怎么赢"。
+ *
+ * 判定优先级：先看我方是否全灭，再看胜利条件。
+ * （两边同时归零时算赢 —— 这是原本的行为，保持不变。）
+ */
 export function checkVictory(state: BattleState): BattlePhase {
   if (livingUnitsOf(state, 'enemy').length === 0) return 'won';
   if (livingUnitsOf(state, 'player').length === 0) return 'lost';
+
+  const objective = state.objective;
+
+  if (objective.kind === 'survive' && state.turn > objective.turns) return 'won';
+
+  if (objective.kind === 'defeat') {
+    /* 语义是"场上不再有这个兵种" —— 而不是"打死了某一个" */
+    const alive = livingUnitsOf(state, 'enemy').some((u) => u.defId === objective.defId);
+    if (!alive) return 'won';
+  }
+
   return 'playing';
+}
+
+/** 结算面板上的胜利文案。按本关的目标来写，玩家才知道自己是怎么赢的 */
+export function victoryText(objective: Objective): string {
+  switch (objective.kind) {
+    case 'defeat':
+      return '★ 我方胜利——敌将已被击破';
+    case 'survive':
+      return '★ 我方胜利——守住了阵地';
+    case 'rout':
+      return '★ 我方胜利——敌方全灭';
+  }
+}
+
+/** 关卡目标的短描述，给侧边栏和关卡选择用 */
+export function objectiveText(objective: Objective): string {
+  switch (objective.kind) {
+    case 'defeat':
+      return '击破敌将';
+    case 'survive':
+      return `守住 ${objective.turns} 回合`;
+    case 'rout':
+      return '全灭敌人';
+  }
 }
 
 /** 该单位此刻是否还能接受指令 */

@@ -192,6 +192,7 @@ export function createBattle(
     rngSeed: scenario.seed,
     rngCursor: 0,
     pendingReinforcements,
+    objective: scenario.objective ?? { kind: 'rout' },
     log: [`—— 第 1 回合 · ${teamLabel('player')}阶段 ——`],
   };
 }
