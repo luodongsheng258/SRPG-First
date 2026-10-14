@@ -1,0 +1,92 @@
+import { key, terrainAt } from './grid';
+import { computeZoc } from './pathfind';
+import { livingUnitsOf } from './state';
+import type { BattlePhase, BattleState, Team, Unit } from './types';
+import { opponent, teamLabel } from './util';
+
+/**
+ * 回合系统。
+ *
+ * 回合结构（火纹式两段制）：
+ *   第 N 回合 = 我方阶段 → 敌方阶段 → 第 N+1 回合
+ * `state.turn` 只在"敌方阶段结束、切回我方"时 +1。
+ */
+
+export function checkVictory(state: BattleState): BattlePhase {
+  if (livingUnitsOf(state, 'enemy').length === 0) return 'won';
+  if (livingUnitsOf(state, 'player').length === 0) return 'lost';
+  return 'playing';
+}
+
+/** 该单位此刻是否还能接受指令 */
+export function canAct(state: BattleState, unit: Unit): boolean {
+  return (
+    state.phase === 'playing' &&
+    unit.hp > 0 &&
+    unit.team === state.activeTeam &&
+    !unit.done
+  );
+}
+
+/** 当前阶段还没行动的单位 */
+export function pendingUnits(state: BattleState, team: Team = state.activeTeam): Unit[] {
+  return livingUnitsOf(state, team).filter((u) => !u.done);
+}
+
+/**
+ * 结束当前阶段，切换到对方：重置其行动标记，并结算地形回复。
+ * 注意只处理**即将行动的一方**：当前方的 done 标记留到下一轮它自己开始时再清。
+ */
+export function endTurn(state: BattleState): BattleState {
+  if (state.phase !== 'playing') return state;
+
+  const next = opponent(state.activeTeam);
+  const turn = state.activeTeam === 'enemy' ? state.turn + 1 : state.turn;
+
+  const lines: string[] = [`—— 第 ${turn} 回合 · ${teamLabel(next)}阶段 ——`];
+
+  /**
+   * **被敌人贴住的单位不能回复。**
+   *
+   * 这条规则不是调味料，是防僵局的必需品：要塞同时给了 防 +3、闪避 +30、回血，
+   * 三者叠加会让防守方在数学上不可杀死 ——
+   * 实测重骑（枪，被斧克）打站在要塞上的山贼：伤害 5、命中仅 30%，
+   * 期望每回合约 1.5 点，而对方回血 2 点。**回血比伤害还快**，
+   * 于是第三关出现 1.3% 永远打不完的对局。
+   *
+   * 判据直接复用"是否处于敌方控制区" —— 「被贴住」和「在敌人相邻格」定义完全一致，
+   * 没必要再造一个概念。
+   */
+  const engagedZoc = computeZoc(state.map, state.units, opponent(next));
+
+  const units = state.units.map((unit) => {
+    if (unit.team !== next) return unit;
+
+    const terrain = terrainAt(state.map, unit.pos);
+    if (terrain.heal <= 0) {
+      return { ...unit, done: false, moved: false };
+    }
+
+    if (engagedZoc.has(key(unit.pos))) {
+      lines.push(`${unit.name} 正与敌人交战，无法在${terrain.name}回复`);
+      return { ...unit, done: false, moved: false };
+    }
+
+    const amount = Math.min(terrain.heal, unit.maxHp - unit.hp);
+    if (amount > 0) {
+      lines.push(
+        `${unit.name} 在${terrain.name}回复 ${amount} HP（${unit.hp + amount}/${unit.maxHp}）`,
+      );
+    }
+
+    return { ...unit, done: false, moved: false, hp: unit.hp + amount };
+  });
+
+  return {
+    ...state,
+    units,
+    activeTeam: next,
+    turn,
+    log: [...state.log, ...lines],
+  };
+}

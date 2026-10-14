@@ -1,0 +1,30 @@
+{
+  "name": "srpg",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "战棋（SRPG）原型 · 纯逻辑 core 与 Phaser 渲染层彻底分离",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke.ts",
+    "typecheck": "tsc --noEmit",
+    "sim": "tsx scripts/simulate.ts",
+    "sweep": "tsx scripts/sweep.ts",
+    "stall": "tsx scripts/stall.ts",
+    "campaign": "tsx scripts/campaign.ts"
+  },
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11",
+    "vitest": "^3.0.5"
+  }
+}

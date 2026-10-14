@@ -1,0 +1,11 @@
+# pnpm 11 的构建脚本审批配置。
+#
+# pnpm 10 起，依赖的 postinstall 默认被拦截，必须在这里显式放行；
+# pnpm 11 把字段名从 onlyBuiltDependencies 改成了 allowBuilds（映射形式）。
+# 放在 package.json 的 "pnpm" 字段里已经不再生效，会被忽略并打印警告。
+#
+# esbuild 必须执行 postinstall 来落地平台二进制，否则 vite / vitest 启动即失败。
+# 放行它同时让 `pnpm install` 不再以 ERR_PNPM_IGNORED_BUILDS 退出 1
+# —— 否则 pnpm 的依赖状态前置检查会让 typecheck / test 连启动都做不到。
+allowBuilds:
+  esbuild: true

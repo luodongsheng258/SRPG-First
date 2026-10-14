@@ -1,0 +1,32 @@
+{
+  "id": "fort-01",
+  "name": "峡谷要塞",
+  "width": 12,
+  "height": 9,
+  "seed": 20260303,
+  "terrain": [
+    ["mountain", "mountain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain"],
+    ["mountain", "plain", "plain", "forest", "plain", "plain", "plain", "forest", "plain", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "plain", "plain", "fort", "fort", "plain", "plain", "plain", "plain", "plain"],
+    ["plain", "plain", "forest", "plain", "plain", "fort", "fort", "plain", "forest", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "water", "water", "plain", "plain", "water", "water", "plain", "plain", "plain"],
+    ["plain", "plain", "forest", "plain", "plain", "fort", "fort", "plain", "forest", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "plain", "plain", "fort", "fort", "plain", "plain", "plain", "plain", "plain"],
+    ["mountain", "plain", "plain", "forest", "plain", "plain", "plain", "forest", "plain", "plain", "plain", "plain"],
+    ["mountain", "mountain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain"]
+  ],
+  "spawns": [
+    { "defId": "soldier", "team": "player", "x": 1, "y": 2 },
+    { "defId": "soldier", "team": "player", "x": 1, "y": 6 },
+    { "defId": "knight", "team": "player", "x": 0, "y": 4 },
+    { "defId": "archer", "team": "player", "x": 0, "y": 3 },
+    { "defId": "mage", "team": "player", "x": 2, "y": 4 },
+
+    { "defId": "bandit-chief", "team": "enemy", "x": 6, "y": 3, "level": 4 },
+    { "defId": "shaman", "team": "enemy", "x": 6, "y": 2, "level": 3 },
+    { "defId": "bandit", "team": "enemy", "x": 5, "y": 2, "level": 3 },
+    { "defId": "bandit", "team": "enemy", "x": 5, "y": 5, "level": 3 },
+    { "defId": "bandit-spear", "team": "enemy", "x": 6, "y": 5, "level": 3 },
+    { "defId": "brigand-archer", "team": "enemy", "x": 8, "y": 6, "level": 3 }
+  ]
+}

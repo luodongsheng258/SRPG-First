@@ -1,0 +1,56 @@
+[
+  {
+    "id": "iron-sword",
+    "name": "铁剑",
+    "kind": "sword",
+    "might": 3,
+    "hit": 12,
+    "crit": 6,
+    "range": [1, 1]
+  },
+  {
+    "id": "iron-lance",
+    "name": "铁枪",
+    "kind": "lance",
+    "might": 4,
+    "hit": 10,
+    "crit": 0,
+    "range": [1, 1]
+  },
+  {
+    "id": "iron-axe",
+    "name": "铁斧",
+    "kind": "axe",
+    "might": 6,
+    "hit": 7,
+    "crit": 0,
+    "range": [1, 1]
+  },
+  {
+    "id": "short-bow",
+    "name": "短弓",
+    "kind": "bow",
+    "might": 3,
+    "hit": 13,
+    "crit": 6,
+    "range": [2, 2]
+  },
+  {
+    "id": "fire-tome",
+    "name": "火球术",
+    "kind": "tome",
+    "might": 4,
+    "hit": 10,
+    "crit": 0,
+    "range": [1, 2]
+  },
+  {
+    "id": "dark-tome",
+    "name": "暗咒",
+    "kind": "tome",
+    "might": 3,
+    "hit": 9,
+    "crit": 0,
+    "range": [1, 2]
+  }
+]

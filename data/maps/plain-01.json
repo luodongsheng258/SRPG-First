@@ -1,0 +1,31 @@
+{
+  "id": "plain-01",
+  "name": "边境平原",
+  "width": 12,
+  "height": 9,
+  "seed": 20260101,
+  "terrain": [
+    ["plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain"],
+    ["plain", "plain", "forest", "plain", "plain", "plain", "plain", "plain", "forest", "plain", "plain", "plain"],
+    ["plain", "plain", "forest", "plain", "hill", "plain", "plain", "hill", "forest", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "plain", "hill", "plain", "plain", "hill", "plain", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "water", "water", "water", "water", "plain", "plain", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "plain", "hill", "plain", "plain", "hill", "plain", "plain", "plain", "plain"],
+    ["plain", "plain", "forest", "plain", "hill", "plain", "plain", "hill", "forest", "plain", "plain", "plain"],
+    ["plain", "plain", "forest", "plain", "plain", "plain", "plain", "plain", "forest", "plain", "plain", "plain"],
+    ["plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain", "plain"]
+  ],
+  "spawns": [
+    { "defId": "soldier", "team": "player", "x": 1, "y": 2 },
+    { "defId": "soldier", "team": "player", "x": 1, "y": 6 },
+    { "defId": "archer", "team": "player", "x": 0, "y": 4 },
+    { "defId": "mage", "team": "player", "x": 2, "y": 4 },
+
+    { "defId": "bandit", "team": "enemy", "x": 11, "y": 2 },
+    { "defId": "bandit", "team": "enemy", "x": 11, "y": 6 },
+    { "defId": "bandit", "team": "enemy", "x": 9, "y": 3 },
+    { "defId": "bandit-spear", "team": "enemy", "x": 10, "y": 5 },
+    { "defId": "bandit-spear", "team": "enemy", "x": 9, "y": 5 },
+    { "defId": "brigand-archer", "team": "enemy", "x": 11, "y": 4 }
+  ]
+}
