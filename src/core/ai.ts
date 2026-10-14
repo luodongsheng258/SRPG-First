@@ -1,5 +1,6 @@
-import { canReach, forecast } from './combat';
+import { canReach, DOUBLE_THRESHOLD, forecast } from './combat';
 import { key, manhattan, samePos } from './grid';
+import { attackPower, triangleEdge, triangleMight } from './weapons';
 import { computeMoveRange, reachableTiles, terrainDistanceField } from './pathfind';
 import { applyAction } from './reducer';
 import type { Action } from './reducer';
@@ -33,13 +34,93 @@ const W_WOUND = 2;
 /** 贴脸的轻微偏好，避免双方互相僵持 */
 const W_APPROACH = 1;
 
+/**
+ * 打"全队集火目标"的额外加分。
+ *
+ * 量级是刻意选的：60 ≈ 6 点伤害，也就是**愿意多挨 6 点左右的反击/多跑一点路**
+ * 去和大家打同一个目标，但绝不会为此去送死（`W_DEATH` 是 −2000，
+ * 且选完还有 `isPointless` 兜底）。
+ */
+const W_FOCUS = 60;
+/** 集火目标评选：能被打死的优先 —— 一次确定的击杀比分散蹭血值钱得多 */
+const W_FOCUS_KILL = 500;
+/** 集火目标评选：已经受伤的优先（补刀比开新战线划算） */
+const W_FOCUS_WOUND = 3;
+/** 集火目标评选：打得疼的优先（先解决威胁大的） */
+const W_FOCUS_THREAT = 4;
+
 interface AttackChoice {
   dest: Vec2;
   target: Unit;
   score: number;
 }
 
-function scoreAttack(map: BattleMap, attackerAtDest: Unit, foe: Unit): number {
+/**
+ * 粗略估计"这个单位这回合大概能对那个敌人造成多少伤害"。
+ *
+ * ⚠️ 刻意**不跑移动范围** —— 那是一次 Dijkstra，而这里要在
+ * 「我方单位 × 敌人」的组合上反复调用（而且每个单位行动前都要重算一遍）。
+ * 用 `mov + 射程` 的曼哈顿距离近似可达性、伤害不算地形和命中：
+ * **选集火目标不需要精确，只需要排出相对顺序。**
+ */
+function roughDamage(unit: Unit, foe: Unit): number {
+  if (unit.hp <= 0) return 0;
+  if (manhattan(unit.pos, foe.pos) > unit.mov + unit.weapon.range[1]) return 0;
+
+  const edge = triangleEdge(unit, foe);
+  const perHit = Math.max(1, attackPower(unit) + triangleMight(edge) - foe.def);
+  const hits = unit.spd - foe.spd >= DOUBLE_THRESHOLD ? 2 : 1;
+  return perHit * hits;
+}
+
+/**
+ * 选出全队本回合的**集火目标**。
+ *
+ * 为什么需要它：原本每个单位独立打分，于是五个敌人各打各的 ——
+ * 每人蹭掉你 6 点血，一轮下来谁都没死。玩家感受到的是"敌人不痛不痒"。
+ * 有了共同目标之后，它们会把伤害叠在同一个人身上，**逼你认真保护后排**。
+ *
+ * 判据（按优先级）：
+ *   1. 全队这回合能合起来打死的 → 优先（一次确定的击杀是最大的收益）
+ *   2. 已经受伤的 → 优先（补刀比开新战线划算）
+ *   3. 攻击力高的 → 优先（先解决威胁大的）
+ *
+ * 够不着的敌人直接排除（全队对它总伤害为 0）——
+ * 否则"远处那个头目攻击力最高"会把全队往错误的方向引。
+ */
+export function pickFocusTarget(state: BattleState, team: Team): Unit | null {
+  const mine = livingUnitsOf(state, team).filter((unit) => !unit.done);
+  if (mine.length === 0) return null;
+
+  let best: Unit | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  /* 顺序取自 units 数组 → 完全确定，平局时永远选同一个 */
+  for (const foe of livingUnitsOf(state, opponent(team))) {
+    let total = 0;
+    for (const unit of mine) total += roughDamage(unit, foe);
+    if (total <= 0) continue;
+
+    const score =
+      (total >= foe.hp ? W_FOCUS_KILL : 0) +
+      (foe.maxHp - foe.hp) * W_FOCUS_WOUND +
+      attackPower(foe) * W_FOCUS_THREAT;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = foe;
+    }
+  }
+
+  return best;
+}
+
+function scoreAttack(
+  map: BattleMap,
+  attackerAtDest: Unit,
+  foe: Unit,
+  focusId: string | null,
+): number {
   const f = forecast(map, attackerAtDest, foe);
 
   let score = f.attacker.damage * W_DAMAGE;
@@ -48,6 +129,8 @@ function scoreAttack(map: BattleMap, attackerAtDest: Unit, foe: Unit): number {
   if (f.attackerWillDie) score -= W_DEATH;
   score += (foe.maxHp - foe.hp) * W_WOUND;
   score -= manhattan(attackerAtDest.pos, foe.pos) * W_APPROACH;
+  /* 集火：全队咬住同一个目标，才咬得死 */
+  if (focusId !== null && foe.id === focusId) score += W_FOCUS;
 
   return score;
 }
@@ -60,7 +143,12 @@ function isPointless(state: BattleState, unit: Unit, choice: AttackChoice): bool
 }
 
 /** 在给定的候选落点里，找到最优的"站在哪打谁" */
-function bestAttack(state: BattleState, unit: Unit, candidates: readonly Vec2[]): AttackChoice | null {
+function bestAttack(
+  state: BattleState,
+  unit: Unit,
+  candidates: readonly Vec2[],
+  focusId: string | null,
+): AttackChoice | null {
   const foes = livingUnitsOf(state, opponent(unit.team));
   let best: AttackChoice | null = null;
 
@@ -68,7 +156,7 @@ function bestAttack(state: BattleState, unit: Unit, candidates: readonly Vec2[])
     const sim: Unit = { ...unit, pos: { x: dest.x, y: dest.y } };
     for (const foe of foes) {
       if (!canReach(sim, foe)) continue;
-      const score = scoreAttack(state.map, sim, foe);
+      const score = scoreAttack(state.map, sim, foe, focusId);
       if (best === null || score > best.score) best = { dest, target: foe, score };
     }
   }
@@ -113,8 +201,15 @@ function planAdvance(state: BattleState, unit: Unit): Action {
 /**
  * 决定单个单位本回合的下一步动作。
  * 返回 move 时表示"路已经走到位，但还没结束行动"，调用方需要再问一次。
+ *
+ * `focusId` 是全队的集火目标（见 `pickFocusTarget`）。传 null 就退化成
+ * 纯个体贪心 —— 单测里用这个来对照"有集火"和"没集火"的区别。
  */
-export function decideUnitAction(state: BattleState, unit: Unit): Action {
+export function decideUnitAction(
+  state: BattleState,
+  unit: Unit,
+  focusId: string | null = null,
+): Action {
   if (unit.done) return { type: 'wait', unitId: unit.id };
 
   const foes = livingUnitsOf(state, opponent(unit.team));
@@ -125,7 +220,7 @@ export function decideUnitAction(state: BattleState, unit: Unit): Action {
     ? [unit.pos]
     : reachableTiles(computeMoveRange(state.map, state.units, unit));
 
-  const choice = bestAttack(state, unit, candidates);
+  const choice = bestAttack(state, unit, candidates, focusId);
 
   if (choice !== null && !isPointless(state, unit, choice)) {
     if (!samePos(choice.dest, unit.pos)) {
@@ -154,7 +249,11 @@ export function planTurn(state: BattleState, team: Team = state.activeTeam): Act
     const pending = livingUnitsOf(cur, team).filter((u) => !u.done);
     if (pending.length === 0) break;
 
-    const action = decideUnitAction(cur, pending[0]);
+    const unit = pending[0];
+    /* 每个单位行动前**重算一次**集火目标：敌人掉血、阵亡都会改变最优解，
+       而选目标本身很便宜（粗略估算，不算移动范围）。 */
+    const focus = pickFocusTarget(cur, team);
+    const action = decideUnitAction(cur, unit, focus?.id ?? null);
     actions.push(action);
     cur = applyAction(cur, action);
   }
