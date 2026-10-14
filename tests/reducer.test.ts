@@ -155,3 +155,73 @@ describe('查询与存档', () => {
     expect(decodeState(encodeState(state))).toEqual(state);
   });
 });
+
+describe('换武器', () => {
+  const sword = testWeapon({ id: 'test-sword', kind: 'sword', range: [1, 1] });
+  const bow = testWeapon({ id: 'test-bow', kind: 'bow', name: '测试弓', range: [2, 2] });
+
+  /** 我方在 (0,1) 带着剑和弓、默认拿剑；敌人在 2 格外 —— 剑够不着，弓够得着 */
+  function armed() {
+    const map = flatMap(6, 3);
+    const hero = makeUnit({
+      id: 'hero',
+      pos: { x: 0, y: 1 },
+      weapons: [sword, bow],
+      weapon: sword,
+    });
+    const foe = makeUnit({ id: 'foe', pos: { x: 2, y: 1 }, team: 'enemy' });
+    return makeState(map, [hero, foe]);
+  }
+
+  const equipBow = { type: 'equip', unitId: 'hero', weaponId: 'test-bow' } as const;
+
+  it('把装备换成携带列表里的另一把', () => {
+    const next = applyAction(armed(), equipBow);
+    expect(next.units.find((u) => u.id === 'hero')?.weapon.id).toBe('test-bow');
+  });
+
+  it('不消耗行动：done / moved 都不变', () => {
+    const next = applyAction(armed(), equipBow);
+    expect(next.units.find((u) => u.id === 'hero')).toMatchObject({ done: false, moved: false });
+  });
+
+  it('换成长射程武器之后，够得着的目标立刻变了', () => {
+    const state = armed();
+    const hero = state.units.find((u) => u.id === 'hero');
+    if (!hero) throw new Error('找不到 hero');
+    /* 剑只有 1 格射程，而敌人在 2 格外 */
+    expect(attackableTargets(state, hero)).toHaveLength(0);
+
+    const next = applyAction(state, equipBow);
+    const rearmed = next.units.find((u) => u.id === 'hero');
+    if (!rearmed) throw new Error('找不到 hero');
+    expect(attackableTargets(next, rearmed).map((u) => u.id)).toEqual(['foe']);
+  });
+
+  it('**打完还能换** —— 这正是"用哪把武器迎接敌方回合"的决策', () => {
+    const state = armed();
+    const waited = applyAction(state, { type: 'wait', unitId: 'hero' });
+    expect(waited.units.find((u) => u.id === 'hero')?.done).toBe(true);
+
+    const swapped = applyAction(waited, equipBow);
+    expect(swapped.units.find((u) => u.id === 'hero')?.weapon.id).toBe('test-bow');
+    /* 换武器不该把 done 清掉 */
+    expect(swapped.units.find((u) => u.id === 'hero')?.done).toBe(true);
+  });
+
+  it('拒绝：没带的武器、已经装备的那把、敌方回合', () => {
+    const state = armed();
+    expect(() => applyAction(state, { type: 'equip', unitId: 'hero', weaponId: '没带' })).toThrow(
+      /没有携带/,
+    );
+    expect(() =>
+      applyAction(state, { type: 'equip', unitId: 'hero', weaponId: 'test-sword' }),
+    ).toThrow(/已经装备/);
+    expect(() => applyAction({ ...state, activeTeam: 'enemy' }, equipBow)).toThrow(/自己的回合/);
+  });
+
+  it('换武器会写进日志', () => {
+    const next = applyAction(armed(), equipBow);
+    expect(next.log.some((line) => line.includes('换上'))).toBe(true);
+  });
+});

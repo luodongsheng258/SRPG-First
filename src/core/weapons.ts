@@ -68,3 +68,24 @@ export function triangleLabel(edge: TriangleEdge): string {
 export function attackPower(unit: Unit): number {
   return unit.atk + unit.weapon.might;
 }
+
+/**
+ * 携带的武器**合起来**能覆盖到的射程区间。威胁范围显示用。
+ *
+ * 为什么不按当前装备算：敌人可以在出手前换武器。
+ * 按当前装备算会低估危险，而威胁范围存在的意义恰恰是"别站那儿"。
+ *
+ * 取的是各武器射程的**外接区间**：带 [1,1] 和 [3,3] 的单位会被算成 [1,3]
+ * （中间那圈其实打不到）。宁可略微高估 —— 高估让人保守，低估让人送命。
+ */
+export function carriedRange(unit: Unit): [number, number] {
+  let min = Number.POSITIVE_INFINITY;
+  let max = 0;
+
+  for (const weapon of unit.weapons) {
+    if (weapon.range[0] < min) min = weapon.range[0];
+    if (weapon.range[1] > max) max = weapon.range[1];
+  }
+
+  return Number.isFinite(min) && max > 0 ? [min, max] : unit.weapon.range;
+}

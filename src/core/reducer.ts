@@ -18,6 +18,14 @@ import type { BattleState, Unit, Vec2 } from './types';
 export type Action =
   | { type: 'move'; unitId: string; to: Vec2 }
   | { type: 'attack'; unitId: string; targetId: string }
+  /**
+   * 换武器。**不消耗行动** —— 换完还能移动和攻击（见 docs/rules.md 3.5）。
+   *
+   * 那为什么换武器还是一个真实的决定？因为**装备会一直保持到敌方回合**，
+   * 而它决定了你能不能在对方打你时反击。所以真正的选择是
+   * "我要用哪把武器迎接下一轮"，而不是"这一下用哪把打"。
+   */
+  | { type: 'equip'; unitId: string; weaponId: string }
   | { type: 'wait'; unitId: string }
   | { type: 'endTurn' };
 
@@ -27,6 +35,8 @@ export function applyAction(state: BattleState, action: Action): BattleState {
       return applyMove(state, action);
     case 'attack':
       return applyAttack(state, action);
+    case 'equip':
+      return applyEquip(state, action);
     case 'wait':
       return applyWait(state, action);
     case 'endTurn':
@@ -91,6 +101,38 @@ function applyAttack(
   );
 
   return finalize({ ...afterCombat, units });
+}
+
+/**
+ * 换武器。**不置 done / moved** —— 它是自由动作，换完照样能移动和攻击。
+ *
+ * 但正因为不消耗行动，它才必须在**任何时刻**都能合法执行：
+ * 包括已经移动过、甚至已经打过的单位（打完还能换，用来迎接敌方回合）。
+ * 唯一的限制是不能在敌方回合或战斗结束后换。
+ */
+function applyEquip(
+  state: BattleState,
+  action: Extract<Action, { type: 'equip' }>,
+): BattleState {
+  const unit = requireUnit(state, action.unitId);
+  if (state.phase !== 'playing') throw new Error('战斗已经结束');
+  if (state.activeTeam !== unit.team) throw new Error(`${unit.name} 不在自己的回合里`);
+  if (unit.hp <= 0) throw new Error(`${unit.name} 已阵亡`);
+
+  const weapon = unit.weapons.find((w) => w.id === action.weaponId);
+  if (!weapon) {
+    const carried = unit.weapons.map((w) => w.id).join(' / ');
+    throw new Error(`${unit.name} 没有携带武器「${action.weaponId}」（携带：${carried}）`);
+  }
+  if (weapon.id === unit.weapon.id) {
+    throw new Error(`${unit.name} 已经装备着${weapon.name}了`);
+  }
+
+  const units = state.units.map((u) =>
+    u.id === unit.id ? { ...u, weapon: u.weapons.find((w) => w.id === action.weaponId) ?? u.weapon } : u,
+  );
+
+  return { ...state, units, log: [...state.log, `${unit.name} 换上${weapon.name}`] };
 }
 
 function applyWait(state: BattleState, action: Extract<Action, { type: 'wait' }>): BattleState {

@@ -33,7 +33,7 @@ const GOOD_UNIT = {
   spd: 5,
   skill: 5,
   mov: 4,
-  weaponId: 'test-blade',
+  weaponIds: ['test-blade'],
   growths: { maxHp: 50, atk: 40, def: 30, spd: 40, skill: 45 },
 };
 
@@ -84,14 +84,16 @@ describe('单位表校验', () => {
     expect(new Set(defs.map((d) => d.id)).size).toBe(defs.length);
     for (const def of defs) {
       expect(def.maxHp).toBeGreaterThan(0);
-      expect(def.weaponId.length).toBeGreaterThan(0);
+      expect(def.weaponIds.length).toBeGreaterThan(0);
     }
   });
 
   it('真实单位表引用的武器都真实存在（交叉校验）', () => {
     const weaponIds = new Set(parseWeaponDefs(weaponsRaw).map((w) => w.id));
     for (const def of parseUnitDefs(unitsRaw)) {
-      expect(weaponIds.has(def.weaponId), `单位 ${def.id} 引用了 ${def.weaponId}`).toBe(true);
+      for (const id of def.weaponIds) {
+        expect(weaponIds.has(id), `单位 ${def.id} 引用了 ${id}`).toBe(true);
+      }
     }
   });
 
@@ -109,9 +111,11 @@ describe('单位表校验', () => {
     expect(() => parseUnitDefs([{ ...GOOD_UNIT, mov: Number.NaN }])).toThrow(/mov/);
   });
 
-  it('缺 weaponId → 报错', () => {
-    const { weaponId: _dropped, ...withoutWeapon } = GOOD_UNIT;
-    expect(() => parseUnitDefs([withoutWeapon])).toThrow(/weaponId/);
+  it('weaponIds 缺失、为空或重复 → 报错', () => {
+    const { weaponIds: _dropped, ...withoutWeapon } = GOOD_UNIT;
+    expect(() => parseUnitDefs([withoutWeapon])).toThrow(/weaponIds/);
+    expect(() => parseUnitDefs([{ ...GOOD_UNIT, weaponIds: [] }])).toThrow(/非空数组/);
+    expect(() => parseUnitDefs([{ ...GOOD_UNIT, weaponIds: ['a', 'a'] }])).toThrow(/重复/);
   });
 
   it('缺 level 或成长率 → 报错', () => {
@@ -216,7 +220,7 @@ describe('建场校验', () => {
   });
 
   it('单位引用了不存在的武器 → 报错', () => {
-    const broken = parseUnitDefs([{ ...GOOD_UNIT, weaponId: '根本没有这把剑' }]);
+    const broken = parseUnitDefs([{ ...GOOD_UNIT, weaponIds: ['根本没有这把剑'] }]);
     expect(() =>
       createBattle(scenarioWith(spawn({ defId: 'dummy' })), broken, weapons),
     ).toThrow(/不存在的武器/);

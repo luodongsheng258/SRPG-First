@@ -67,6 +67,12 @@ export function makeUnit(overrides: Partial<Unit> & Pick<Unit, 'pos'>): Unit {
   const { pos } = overrides;
   const team: Team = overrides.team ?? 'player';
 
+  /* 武器：默认一把"全零加成"的测试剑。
+     要带多把就传 `weapons`（第一把自动成为当前装备），
+     或者同时传 `weapon` 指定当前装备哪一把 —— 用来测换武器。 */
+  const weapons = overrides.weapons ?? [overrides.weapon ?? testWeapon()];
+  const weapon = overrides.weapon ?? weapons[0] ?? testWeapon();
+
   const base: Unit = {
     id: 'unset',
     defId: 'test-unit',
@@ -82,7 +88,8 @@ export function makeUnit(overrides: Partial<Unit> & Pick<Unit, 'pos'>): Unit {
     spd: 5,
     skill: 5,
     mov: 4,
-    weapon: testWeapon(),
+    weapon,
+    weapons,
     slot: 'test-unit#0',
     exp: 0,
     /* 成长率全 0：测试里不该有升级掷骰。
@@ -97,7 +104,8 @@ export function makeUnit(overrides: Partial<Unit> & Pick<Unit, 'pos'>): Unit {
     ...base,
     ...overrides,
     pos: { x: pos.x, y: pos.y },
-    weapon: overrides.weapon ?? testWeapon(),
+    weapon,
+    weapons,
   };
   if (overrides.id === undefined) merged.id = `${merged.team}-${pos.x}-${pos.y}`;
   return merged;

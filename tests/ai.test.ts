@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyAction, decideUnitAction, manhattan, pickFocusTarget, planTurn, runTurn } from '../src/core';
 import type { Action, BattleState, Unit } from '../src/core';
-import { flatMap, makeRangedUnit, makeState, makeUnit } from './fixtures';
+import { flatMap, makeRangedUnit, makeState, makeUnit, testWeapon } from './fixtures';
 
 describe('贪心 AI 决策', () => {
   it('打得到就会打，并且真的造成伤害', () => {
@@ -355,5 +355,58 @@ describe('集火：会为了打同一个目标而放弃个体最优', () => {
        没有集火的话他们会各挑一个目标，两个都打不死。 */
     expect(after('hurt')?.hp).toBe(0);
     expect(after('fresh')?.hp).toBe(20);
+  });
+});
+
+describe('AI 会为了打得更划算而换武器', () => {
+  it('目标在 2 格外、只有长武器够得着时，先换武器', () => {
+    const map = flatMap(7, 3);
+    const sword = testWeapon({ id: 'sword', kind: 'sword', range: [1, 1] });
+    const bow = testWeapon({ id: 'bow', kind: 'bow', name: '测试弓', range: [2, 2] });
+    /* mov 0：不许移动，逼它只能靠换武器去够 2 格外的敌人 */
+    const me = makeUnit({
+      id: 'me',
+      pos: { x: 0, y: 1 },
+      mov: 0,
+      weapons: [sword, bow],
+      weapon: sword,
+    });
+    const foe = makeUnit({ id: 'foe', pos: { x: 2, y: 1 }, team: 'enemy' });
+
+    const action = decideUnitAction(makeState(map, [me, foe]), me, null);
+    expect(action).toEqual({ type: 'equip', unitId: 'me', weaponId: 'bow' });
+  });
+
+  it('会换成相克占优的武器（自己拿斧、对面也是斧，换成剑吃相克）', () => {
+    const map = flatMap(5, 3);
+    const sword = testWeapon({ id: 'sword', kind: 'sword', range: [1, 1] });
+    const axe = testWeapon({ id: 'axe', kind: 'axe', name: '测试斧', range: [1, 1] });
+    const me = makeUnit({ id: 'me', pos: { x: 0, y: 1 }, weapons: [axe, sword], weapon: axe });
+    const foe = makeUnit({
+      id: 'foe',
+      pos: { x: 1, y: 1 },
+      team: 'enemy',
+      weapon: testWeapon({ kind: 'axe' }),
+    });
+
+    const action = decideUnitAction(makeState(map, [me, foe]), me, null);
+    expect(action).toEqual({ type: 'equip', unitId: 'me', weaponId: 'sword' });
+  });
+
+  it('当前武器已经是最优时不会多此一举地换', () => {
+    const map = flatMap(5, 3);
+    const sword = testWeapon({ id: 'sword', kind: 'sword', range: [1, 1] });
+    const axe = testWeapon({ id: 'axe', kind: 'axe', name: '测试斧', range: [1, 1] });
+    /* 反过来：拿着剑、对面是斧头 —— 剑本来就占优，不该换 */
+    const me = makeUnit({ id: 'me', pos: { x: 0, y: 1 }, weapons: [sword, axe], weapon: sword });
+    const foe = makeUnit({
+      id: 'foe',
+      pos: { x: 1, y: 1 },
+      team: 'enemy',
+      weapon: testWeapon({ kind: 'axe' }),
+    });
+
+    const action = decideUnitAction(makeState(map, [me, foe]), me, null);
+    expect(action.type).not.toBe('equip');
   });
 });

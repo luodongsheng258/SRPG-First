@@ -52,5 +52,23 @@
     "hit": 9,
     "crit": 0,
     "range": [1, 2]
+  },
+  {
+    "id": "steel-lance",
+    "name": "钢枪",
+    "kind": "lance",
+    "might": 6,
+    "hit": 8,
+    "crit": 0,
+    "range": [1, 1]
+  },
+  {
+    "id": "long-bow",
+    "name": "长弓",
+    "kind": "bow",
+    "might": 2,
+    "hit": 9,
+    "crit": 0,
+    "range": [2, 3]
   }
 ]

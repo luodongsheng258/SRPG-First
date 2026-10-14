@@ -1,6 +1,7 @@
 import {
   attackableTargets,
   canAct,
+  carriedRange,
   computeMoveRange,
   key,
   livingUnitsOf,
@@ -108,8 +109,11 @@ export function computeThreatZone(state: BattleState, team: Team): Set<string> {
 
   for (const unit of livingUnitsOf(state, team)) {
     const range = computeMoveRange(state.map, state.units, unit);
+    /* 按**携带武器里最大的射程**算，不是当前装备 ——
+       敌人可以在出手前换武器，按当前装备算会低估危险。 */
+    const reach = carriedRange(unit);
     for (const from of reachableTiles(range)) {
-      for (const tile of tilesInRange(state.map, from, unit.weapon.range)) {
+      for (const tile of tilesInRange(state.map, from, reach)) {
         zone.add(key(tile));
       }
     }
@@ -152,10 +156,16 @@ export function resolveClick(ctx: ClickContext): ClickIntent {
   const clicked = unitAt(state.units, tile);
 
   if (mode === 'idle') {
-    if (clicked && clicked.team === 'player' && canAct(state, clicked)) {
-      return { kind: 'select', unitId: clicked.id };
+    if (clicked && clicked.team === 'player') {
+      /* 还能动的单位照旧可以选。
+         另外**带两把以上武器、已经行动完的单位也要能选中** ——
+         换武器是自由动作，而"用哪把武器迎接敌方回合"正是这个机制的核心决策
+         （见 docs/rules.md 3.5）。不放开这条的话，玩家打完就再也换不了武器了。 */
+      if (canAct(state, clicked) || clicked.weapons.length > 1) {
+        return { kind: 'select', unitId: clicked.id };
+      }
     }
-    /* 点敌人 / 点空地 / 点已行动完的友军：什么都不做，别乱选 */
+    /* 点敌人 / 点空地 / 点只带一把武器又已行动完的友军：什么都不做 */
     return { kind: 'none' };
   }
 

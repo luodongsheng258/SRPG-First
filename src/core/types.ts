@@ -90,14 +90,17 @@ export interface UnitDef {
   spd: number;
   skill: number;
   mov: number;
-  /** 装备的武器 id，指向 data/weapons.json */
-  weaponId: string;
+  /**
+   * 携带的武器 id，指向 `data/weapons.json`。**数组第一把是默认装备的。**
+   * 带两把以上的单位可以在自己回合自由切换（见 docs/rules.md 3.5）。
+   */
+  weaponIds: string[];
   /** 升级时各项涨 1 点的概率（百分比） */
   growths: Growths;
 }
 
 /** 战场上的单位实例 */
-export interface Unit extends Omit<UnitDef, 'id' | 'weaponId'> {
+export interface Unit extends Omit<UnitDef, 'id' | 'weaponIds'> {
   /** 战场实例 id，例如 "player-soldier-0" */
   id: string;
   /** 指向 UnitDef.id */
@@ -119,13 +122,20 @@ export interface Unit extends Omit<UnitDef, 'id' | 'weaponId'> {
   /** 本回合是否已消耗过移动（防止一回合内多次移动） */
   moved: boolean;
   /**
-   * 装备的武器，**直接内嵌成纯数据**而不是存一个 id。
+   * **当前装备**的武器，直接内嵌成纯数据而不是存一个 id。
    *
-   * 这样 `state` 依然是自洽的：战斗公式不需要再去查一张全局武器表，
-   * 存档也不需要连带保存武器定义。代价是每个单位多几个字段，
-   * 对这点数据量完全无所谓。
+   * 战斗、射程、相克、反击判定全看它。切换武器就是把它换成 `weapons` 里的另一把。
+   * 这样 `state` 依然是自洽的：战斗公式不需要查全局武器表，存档也不用连带保存武器定义。
    */
   weapon: WeaponDef;
+  /**
+   * 携带的全部武器（**含当前装备的这把**）。
+   *
+   * 和 `weapon` 有一点数据重复，是刻意换来的：战斗公式只读 `weapon`，
+   * 于是切武器只改一个字段，`combat` / `interaction` / `hud` / `ai` 一行都不用动。
+   * 代价是每个单位多存一两把武器的字段 —— 对这个数据量完全无所谓。
+   */
+  weapons: WeaponDef[];
 }
 
 export interface BattleMap {

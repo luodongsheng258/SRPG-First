@@ -10,7 +10,7 @@
     "spd": 6,
     "skill": 6,
     "mov": 5,
-    "weaponId": "iron-sword",
+    "weaponIds": ["iron-sword"],
     "growths": { "maxHp": 70, "atk": 45, "def": 35, "spd": 45, "skill": 50 }
   },
   {
@@ -24,7 +24,7 @@
     "spd": 7,
     "skill": 7,
     "mov": 5,
-    "weaponId": "short-bow",
+    "weaponIds": ["short-bow", "long-bow"],
     "growths": { "maxHp": 55, "atk": 40, "def": 25, "spd": 55, "skill": 60 }
   },
   {
@@ -38,7 +38,7 @@
     "spd": 4,
     "skill": 5,
     "mov": 7,
-    "weaponId": "iron-lance",
+    "weaponIds": ["iron-lance"],
     "growths": { "maxHp": 80, "atk": 50, "def": 50, "spd": 25, "skill": 40 }
   },
   {
@@ -52,7 +52,7 @@
     "spd": 5,
     "skill": 8,
     "mov": 4,
-    "weaponId": "fire-tome",
+    "weaponIds": ["fire-tome"],
     "growths": { "maxHp": 45, "atk": 55, "def": 15, "spd": 40, "skill": 60 }
   },
   {
@@ -66,7 +66,7 @@
     "spd": 5,
     "skill": 5,
     "mov": 4,
-    "weaponId": "iron-axe",
+    "weaponIds": ["iron-axe"],
     "growths": { "maxHp": 60, "atk": 45, "def": 25, "spd": 40, "skill": 40 }
   },
   {
@@ -80,7 +80,7 @@
     "spd": 5,
     "skill": 5,
     "mov": 4,
-    "weaponId": "iron-lance",
+    "weaponIds": ["iron-lance"],
     "growths": { "maxHp": 60, "atk": 45, "def": 30, "spd": 40, "skill": 45 }
   },
   {
@@ -94,7 +94,7 @@
     "spd": 6,
     "skill": 5,
     "mov": 4,
-    "weaponId": "short-bow",
+    "weaponIds": ["short-bow"],
     "growths": { "maxHp": 55, "atk": 40, "def": 25, "spd": 50, "skill": 45 }
   },
   {
@@ -103,12 +103,12 @@
     "unitClass": "infantry",
     "level": 1,
     "maxHp": 32,
-    "atk": 7,
+    "atk": 5,
     "def": 3,
     "spd": 6,
     "skill": 6,
     "mov": 5,
-    "weaponId": "iron-lance",
+    "weaponIds": ["steel-lance"],
     "growths": { "maxHp": 75, "atk": 50, "def": 40, "spd": 45, "skill": 45 }
   },
   {
@@ -122,7 +122,7 @@
     "spd": 5,
     "skill": 6,
     "mov": 4,
-    "weaponId": "dark-tome",
+    "weaponIds": ["dark-tome"],
     "growths": { "maxHp": 50, "atk": 50, "def": 20, "spd": 40, "skill": 50 }
   }
 ]

@@ -466,7 +466,39 @@ export class BattleScene extends Phaser.Scene {
       keyboard.on('keydown-T', () => this.toggleThreat());
       keyboard.on('keydown-ESC', () => this.cancelSelection());
       keyboard.on('keydown-R', () => this.restart());
+      /* 换武器。数字键直接选第 N 把，Tab 循环 —— 两个都给，
+         因为"我想换成第 2 把"和"我想换一把看看"是两种不同的意图。 */
+      keyboard.on('keydown-TAB', () => this.cycleWeapon(1));
+      for (let n = 1; n <= 9; n += 1) {
+        keyboard.on(`keydown-${['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'][n - 1]}`, () =>
+          this.equipWeaponAt(n - 1),
+        );
+      }
     }
+  }
+
+  /** 把当前选中单位的武器换成携带列表里的第 index 把（数字键用） */
+  private equipWeaponAt(index: number): void {
+    const unit = this.selectedUnit();
+    if (unit === null || this.busy) return;
+    const weapon = unit.weapons[index];
+    if (weapon === undefined || weapon.id === unit.weapon.id) {
+      /* 换了也没变化 —— 给个否定音，让"按了但没用"和不按有区别 */
+      if (weapon !== undefined) this.audio.play('deny');
+      return;
+    }
+    this.audio.play('select');
+    this.dispatch({ type: 'equip', unitId: unit.id, weaponId: weapon.id });
+  }
+
+  /** Tab：在当前武器的下一把之间循环 */
+  private cycleWeapon(step: number): void {
+    const unit = this.selectedUnit();
+    if (unit === null || this.busy || unit.weapons.length < 2) return;
+    const current = unit.weapons.findIndex((w) => w.id === unit.weapon.id);
+    const next = unit.weapons[(current + step + unit.weapons.length) % unit.weapons.length];
+    if (next === undefined) return;
+    this.equipWeaponAt(unit.weapons.indexOf(next));
   }
 
   private pointerToTile(pointer: Phaser.Input.Pointer): Vec2 | null {

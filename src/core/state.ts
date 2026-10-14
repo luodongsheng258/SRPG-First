@@ -21,9 +21,14 @@ import { teamLabel } from './util';
  * 所有"会改变状态"的操作都必须走 reducer.ts。
  */
 
+/** 复制一把武器。`range` 是数组，状态里不许出现跨单位共享的可变引用 */
+function copyWeapon(weapon: WeaponDef): WeaponDef {
+  return { ...weapon, range: [weapon.range[0], weapon.range[1]] };
+}
+
 export function createUnitInstance(
   def: UnitDef,
-  weapon: WeaponDef,
+  weapons: readonly WeaponDef[],
   team: Team,
   pos: Vec2,
   index: number,
@@ -35,13 +40,18 @@ export function createUnitInstance(
      我方角色稍后会被名册覆盖成实际成长值，这里算的是"白板"。 */
   const stats = statsAtLevel(def, level);
 
+  const carried = weapons.map(copyWeapon);
+  const first = carried[0];
+  if (first === undefined) throw new Error(`单位「${def.name}」没有携带任何武器`);
+
   return {
     /* 先铺模板，再覆盖实例字段。顺序不能颠倒。 */
     ...def,
     ...stats,
-    /* 武器整个内嵌进来，并复制一份 range 数组 ——
-       状态里不许出现跨单位共享的可变引用。 */
-    weapon: { ...weapon, range: [weapon.range[0], weapon.range[1]] },
+    /* 默认装备第一把。`weapon` 和 `weapons[0]` 指向同一个对象是刻意的 ——
+       切武器就是把 `weapon` 换成 `weapons` 里的另一把。 */
+    weapon: first,
+    weapons: carried,
     id: `${team}-${def.id}-${index}`,
     defId: def.id,
     slot,
@@ -89,9 +99,15 @@ export function createBattle(
     const def = defMap.get(spawn.defId);
     if (!def) throw new Error(`未知单位模板：${spawn.defId}`);
 
-    const weapon = weaponMap.get(def.weaponId);
-    if (!weapon) {
-      throw new Error(`单位「${def.name}」装备了不存在的武器：${def.weaponId}`);
+    const weapons = def.weaponIds.map((id) => {
+      const weapon = weaponMap.get(id);
+      if (!weapon) {
+        throw new Error(`单位「${def.name}」携带了不存在的武器：${id}`);
+      }
+      return weapon;
+    });
+    if (weapons.length === 0) {
+      throw new Error(`单位「${def.name}」至少要携带一把武器`);
     }
 
     assertSpawnable(scenario.map, spawn);
@@ -107,7 +123,7 @@ export function createBattle(
     units.push(
       createUnitInstance(
         def,
-        weapon,
+        weapons,
         spawn.team,
         { x: spawn.x, y: spawn.y },
         index,

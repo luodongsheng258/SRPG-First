@@ -28,6 +28,23 @@ import type {
 
 const UNIT_CLASSES: readonly UnitClass[] = ['infantry', 'archer', 'cavalier', 'mage'];
 
+/**
+ * 携带的武器 id 列表。**至少要有一把** —— 没有武器的单位连射程都没有，
+ * 会在战斗公式里算出 NaN，比起在加载期报错糟糕得多。
+ */
+function parseWeaponIds(raw: unknown, at: string): string[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error(`${at}.weaponIds 必须是非空数组`);
+  }
+  const ids = raw.map((value, i) => str(value, `${at}.weaponIds[${i}]`));
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) throw new Error(`${at}.weaponIds 里有重复的武器：${id}`);
+    seen.add(id);
+  }
+  return ids;
+}
+
 function parseGrowths(raw: unknown, at: string): Growths {
   if (!isRecord(raw)) throw new Error(`${at}.growths 必须是对象`);
   const growths = { maxHp: 0, atk: 0, def: 0, spd: 0, skill: 0 };
@@ -63,7 +80,7 @@ export function parseUnitDefs(raw: unknown): UnitDef[] {
       spd: num(entry.spd, `${at}.spd`),
       skill: num(entry.skill, `${at}.skill`),
       mov: num(entry.mov, `${at}.mov`),
-      weaponId: str(entry.weaponId, `${at}.weaponId`),
+      weaponIds: parseWeaponIds(entry.weaponIds, at),
       growths: parseGrowths(entry.growths, at),
     };
 

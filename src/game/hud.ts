@@ -111,6 +111,39 @@ const KIND_LABEL: Record<WeaponKind, string> = {
   tome: '魔法',
 };
 
+/**
+ * 携带的武器列表。当前装备的那把用实心圆点 + 琥珀色标出来。
+ *
+ * 刻意把**威力、命中、射程**都摊开写：换武器的决策完全建立在这三个数上，
+ * 藏起来玩家就没法判断该换哪把。
+ */
+function weaponCard(unit: Unit): string {
+  const multi = unit.weapons.length > 1;
+  const rows = unit.weapons.map((weapon, index) => {
+    const equipped = weapon.id === unit.weapon.id;
+    const range =
+      weapon.range[0] === weapon.range[1]
+        ? `${weapon.range[0]} 格`
+        : `${weapon.range[0]}~${weapon.range[1]} 格`;
+
+    return (
+      `<div class="row weapon${equipped ? ' on' : ''}">` +
+      `<span class="k">${multi ? `${equipped ? '●' : '○'} ${index + 1}` : '武器'}</span>` +
+      `<span class="v">${esc(weapon.name)}` +
+      `<span class="sub">${KIND_LABEL[weapon.kind]} · ${range} · 威 ${weapon.might} · 中 ${weapon.hit}</span>` +
+      `</span></div>`
+    );
+  });
+
+  if (multi) {
+    rows.push(
+      '<div class="row"><span class="k"></span>' +
+        '<span class="v sub">按数字键或 Tab 换武器（不消耗行动）</span></div>',
+    );
+  }
+  return rows.join('');
+}
+
 function unitCard(unit: Unit, label: string): string {
   const status = unit.done ? '已行动' : unit.moved ? '已移动' : '待命';
   const power = attackPower(unit);
@@ -121,9 +154,8 @@ function unitCard(unit: Unit, label: string): string {
     `<span class="v ${unit.team}">${unit.hp} / ${unit.maxHp}</span></div>`,
     hpBar(unit),
     expBar(unit),
-    `<div class="row"><span class="k">武器</span><span class="v">${esc(unit.weapon.name)}（${KIND_LABEL[unit.weapon.kind]}）</span></div>`,
+    weaponCard(unit),
     `<div class="row"><span class="k">攻 / 防 / 速</span><span class="v">${power} / ${unit.def} / ${unit.spd}</span></div>`,
-    `<div class="row"><span class="k">射程 / 暴击</span><span class="v">${unit.weapon.range[0]} ~ ${unit.weapon.range[1]} / ${unit.weapon.crit}%</span></div>`,
     `<div class="row"><span class="k">状态</span><span class="v">${status}</span></div>`,
   ].join('');
 }

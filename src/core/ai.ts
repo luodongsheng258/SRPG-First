@@ -5,7 +5,7 @@ import { computeMoveRange, reachableTiles, terrainDistanceField } from './pathfi
 import { applyAction } from './reducer';
 import type { Action } from './reducer';
 import { livingUnitsOf } from './state';
-import type { BattleMap, BattleState, Team, Unit, Vec2 } from './types';
+import type { BattleMap, BattleState, Team, Unit, Vec2, WeaponDef } from './types';
 import { opponent } from './util';
 
 /**
@@ -52,6 +52,8 @@ const W_FOCUS_THREAT = 4;
 interface AttackChoice {
   dest: Vec2;
   target: Unit;
+  /** 用哪把武器打。和当前装备不同时，`decideUnitAction` 会先派一个 equip */
+  weapon: WeaponDef;
   score: number;
 }
 
@@ -137,12 +139,17 @@ function scoreAttack(
 
 /** 打不动还会被反杀 —— 这种交换毫无意义，不如先去推进 */
 function isPointless(state: BattleState, unit: Unit, choice: AttackChoice): boolean {
-  const sim: Unit = { ...unit, pos: { x: choice.dest.x, y: choice.dest.y } };
+  const sim: Unit = { ...unit, pos: { x: choice.dest.x, y: choice.dest.y }, weapon: choice.weapon };
   const f = forecast(state.map, sim, choice.target);
   return f.attackerWillDie && !f.defenderWillDie;
 }
 
-/** 在给定的候选落点里，找到最优的"站在哪打谁" */
+/**
+ * 在给定的候选落点里，找到最优的"站在哪、用哪把武器、打谁"。
+ *
+ * 武器也进搜索空间 —— 这样 AI 自动会用上射程（用手斧在 2 格外白嫖）
+ * 和相克（换一把克制的武器再打），不需要为它们各写一段专门的逻辑。
+ */
 function bestAttack(
   state: BattleState,
   unit: Unit,
@@ -150,14 +157,23 @@ function bestAttack(
   focusId: string | null,
 ): AttackChoice | null {
   const foes = livingUnitsOf(state, opponent(unit.team));
+
+  /* 当前装备排在第一 —— 分数相同时它会赢，免得为了一模一样的效果白换一次武器 */
+  const loadout = [
+    unit.weapon,
+    ...unit.weapons.filter((w) => w.id !== unit.weapon.id),
+  ];
+
   let best: AttackChoice | null = null;
 
   for (const dest of candidates) {
-    const sim: Unit = { ...unit, pos: { x: dest.x, y: dest.y } };
-    for (const foe of foes) {
-      if (!canReach(sim, foe)) continue;
-      const score = scoreAttack(state.map, sim, foe, focusId);
-      if (best === null || score > best.score) best = { dest, target: foe, score };
+    for (const weapon of loadout) {
+      const sim: Unit = { ...unit, pos: { x: dest.x, y: dest.y }, weapon };
+      for (const foe of foes) {
+        if (!canReach(sim, foe)) continue;
+        const score = scoreAttack(state.map, sim, foe, focusId);
+        if (best === null || score > best.score) best = { dest, target: foe, weapon, score };
+      }
     }
   }
 
@@ -223,6 +239,11 @@ export function decideUnitAction(
   const choice = bestAttack(state, unit, candidates, focusId);
 
   if (choice !== null && !isPointless(state, unit, choice)) {
+    /* 顺序固定：先换武器 → 再走位 → 最后出手。
+       换武器是自由动作（不消耗行动），所以可以插在最前面。 */
+    if (choice.weapon.id !== unit.weapon.id) {
+      return { type: 'equip', unitId: unit.id, weaponId: choice.weapon.id };
+    }
     if (!samePos(choice.dest, unit.pos)) {
       return { type: 'move', unitId: unit.id, to: choice.dest };
     }
@@ -240,8 +261,8 @@ export function decideUnitAction(
 export function planTurn(state: BattleState, team: Team = state.activeTeam): Action[] {
   const actions: Action[] = [];
   let cur = state;
-  /* 一个单位最多花 4 步（move / attack / wait / 意外），加 8 的冗余足够 */
-  const guard = state.units.length * 4 + 8;
+  /* 一个单位最多花 5 步（equip / move / attack / wait / 意外），加 8 的冗余足够 */
+  const guard = state.units.length * 5 + 8;
 
   for (let i = 0; i < guard; i += 1) {
     if (cur.phase !== 'playing' || cur.activeTeam !== team) return actions;

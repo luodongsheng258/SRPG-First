@@ -262,6 +262,13 @@
       .expfill { height: 100%; background: #4fb4e8; }
       .exprow { margin-top: 6px; }
       .exprow .k { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+
+      /* 携带的武器列表：当前装备的那把用琥珀色标出来 */
+      #unit-info .weapon { align-items: flex-start; }
+      #unit-info .weapon.on .k,
+      #unit-info .weapon.on .v { color: #ffd166; }
+      #unit-info .sub { display: block; color: var(--dim); font-size: 11px; }
+      #unit-info .weapon.on .sub { color: #d8b45f; }
       .muted { color: var(--dim); }
       .warn { color: var(--warn); }
       #log {
