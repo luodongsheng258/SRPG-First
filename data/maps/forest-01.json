@@ -26,5 +26,11 @@
     { "defId": "bandit", "team": "enemy", "x": 8, "y": 5, "level": 3 },
     { "defId": "bandit-spear", "team": "enemy", "x": 10, "y": 4, "level": 3 },
     { "defId": "brigand-archer", "team": "enemy", "x": 11, "y": 4, "level": 3 }
+  ],
+  "reinforcements": [
+    {
+      "turn": 4,
+      "spawns": [{ "defId": "bandit", "team": "enemy", "x": 0, "y": 0, "level": 3 }]
+    }
   ]
 }

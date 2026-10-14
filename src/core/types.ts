@@ -165,7 +165,35 @@ export interface UnitSpawn {
 export interface Scenario {
   map: BattleMap;
   spawns: UnitSpawn[];
+  /** 中途到场的敌人波次（见 docs/rules.md 6.5）。不写就是纯初始布阵 */
+  reinforcements: ReinforcementSpawn[];
   seed: number;
+}
+
+/** 地图里写的"第 N 回合来一波" */
+export interface ReinforcementSpawn {
+  /** 在第几回合**结束时**到场。<= 当前回合的会在同一次结算里一起到场 */
+  turn: number;
+  spawns: UnitSpawn[];
+}
+
+/**
+ * **还没有身份**的单位：属性、等级、武器都就绪，只差 `id` / `pos` / `slot`。
+ *
+ * 存在的理由是架构约束：`endTurn` 是纯函数，签名是 `(state) => state`，
+ * 拿不到 `defs` / `weapons` 两张表。所以增援必须在**开局时就把单位造好**
+ * 塞进 state —— 否则到场的瞬间没法解析兵种和武器。
+ *
+ * 代价是存档里会带上这些"还没上场"的完整单位数据。这点体积换来的
+ * 是 endTurn 保持纯函数、可单测、可回放，非常划算。
+ */
+export type UnitBlueprint = Omit<Unit, 'id' | 'pos' | 'slot'>;
+
+export interface PendingReinforcement {
+  turn: number;
+  /** 请求的到场位置。若那一刻被占了，实际会挪到最近的空格 */
+  pos: Vec2;
+  blueprint: UnitBlueprint;
 }
 
 export type BattlePhase = 'playing' | 'won' | 'lost';
@@ -182,5 +210,11 @@ export interface BattleState {
   rngSeed: number;
   /** 随机游标：每次掷骰 +1。存进 state 里才能保证回放一致 */
   rngCursor: number;
+  /**
+   * 还没到场的增援。`turn <= 当前回合` 的会在 `endTurn` 里落地。
+   *
+   * 单位在**开局就已经造好了**（见 `UnitBlueprint` 的说明）。
+   */
+  pendingReinforcements: PendingReinforcement[];
   log: string[];
 }

@@ -6,6 +6,7 @@ import type {
   BattleMap,
   BattleState,
   Growths,
+  ReinforcementSpawn,
   Scenario,
   Team,
   TerrainKind,
@@ -178,32 +179,67 @@ export function parseScenario(raw: unknown): Scenario {
   };
 
   if (!Array.isArray(raw.spawns)) throw new Error('spawns 必须是数组');
-  const spawns: UnitSpawn[] = raw.spawns.map((entry, i) => {
-    const at = `spawns[${i}]`;
-    if (!isRecord(entry)) throw new Error(`${at} 必须是对象`);
-    const team = str(entry.team, `${at}.team`);
-    if (team !== 'player' && team !== 'enemy') {
-      throw new Error(`${at}.team 必须是 "player" 或 "enemy"，收到 ${team}`);
-    }
-    const spawn: UnitSpawn = {
-      defId: str(entry.defId, `${at}.defId`),
-      team: team as Team,
-      x: num(entry.x, `${at}.x`),
-      y: num(entry.y, `${at}.y`),
-    };
-    /* 可选的等级覆盖：有了它，"第二章的敌人更强"只要写一个数字 */
-    if (entry.level !== undefined) {
-      const level = num(entry.level, `${at}.level`);
-      if (level < 1) throw new Error(`${at}.level 必须从 1 开始`);
-      spawn.level = level;
-    }
-    return spawn;
-  });
+  const spawns: UnitSpawn[] = raw.spawns.map((entry, i) => parseSpawn(entry, `spawns[${i}]`));
 
   const seed = raw.seed === undefined ? 1 : num(raw.seed, 'seed');
   if (!Number.isInteger(seed)) throw new Error('seed 必须是整数');
 
-  return { map, spawns, seed };
+  return { map, spawns, reinforcements: parseReinforcements(raw.reinforcements), seed };
+}
+
+/**
+ * 解析一个出生点。初始布阵和增援共用 ——
+ * 两处字段一样、校验也必须一样，各写一遍迟早会不一致。
+ */
+function parseSpawn(raw: unknown, at: string): UnitSpawn {
+  if (!isRecord(raw)) throw new Error(`${at} 必须是对象`);
+  const team = str(raw.team, `${at}.team`);
+  if (team !== 'player' && team !== 'enemy') {
+    throw new Error(`${at}.team 必须是 "player" 或 "enemy"，收到 ${team}`);
+  }
+
+  const spawn: UnitSpawn = {
+    defId: str(raw.defId, `${at}.defId`),
+    team: team as Team,
+    x: num(raw.x, `${at}.x`),
+    y: num(raw.y, `${at}.y`),
+  };
+  /* 可选的等级覆盖：有了它，"第二章的敌人更强"只要写一个数字 */
+  if (raw.level !== undefined) {
+    const level = num(raw.level, `${at}.level`);
+    if (level < 1) throw new Error(`${at}.level 必须从 1 开始`);
+    spawn.level = level;
+  }
+  return spawn;
+}
+
+/**
+ * 增援波次（见 docs/rules.md 6.5）。不写 `reinforcements` 就是没有增援。
+ *
+ * `turn` 是**第几回合开始的时候**到场，所以最小是 1（等于开局就多几个人，
+ * 那应该写进 spawns 而不是这里）。
+ */
+function parseReinforcements(raw: unknown): ReinforcementSpawn[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new Error('reinforcements 必须是数组');
+
+  return raw.map((entry, i) => {
+    const at = `reinforcements[${i}]`;
+    if (!isRecord(entry)) throw new Error(`${at} 必须是对象`);
+
+    const turn = num(entry.turn, `${at}.turn`);
+    if (!Number.isInteger(turn) || turn < 1) {
+      throw new Error(`${at}.turn 必须是 >= 1 的整数`);
+    }
+    if (!Array.isArray(entry.spawns) || entry.spawns.length === 0) {
+      throw new Error(`${at}.spawns 必须是非空数组`);
+    }
+
+    return {
+      turn,
+      spawns: entry.spawns.map((spawn, j) => parseSpawn(spawn, `${at}.spawns[${j}]`)),
+    };
+  });
 }
 
 /** 一步到位：从三个 JSON 造出可玩的战场状态 */

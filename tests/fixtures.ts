@@ -1,6 +1,7 @@
 import type {
   BattleMap,
   BattleState,
+  PendingReinforcement,
   Team,
   TerrainKind,
   Unit,
@@ -125,10 +126,30 @@ export function makeRangedUnit(overrides: Partial<Unit> & Pick<Unit, 'pos'>): Un
   });
 }
 
+/**
+ * 造一条"待命增援"。
+ *
+ * 蓝图就是去掉身份的 `Unit` —— 到场时才补 `id` / `slot` / `pos`，
+ * 因为 `endTurn` 是纯函数，拿不到兵种和武器表（见 `UnitBlueprint`）。
+ */
+export function makePending(
+  turn: number,
+  pos: { x: number; y: number },
+  overrides: Partial<Unit> & Pick<Unit, 'pos'>,
+): PendingReinforcement {
+  const { id: _id, pos: _pos, slot: _slot, ...blueprint } = makeUnit({ ...overrides, pos });
+  return { turn, pos: { x: pos.x, y: pos.y }, blueprint };
+}
+
 export function makeState(
   map: BattleMap,
   units: Unit[],
-  options: { seed?: number; activeTeam?: Team } = {},
+  options: {
+    seed?: number;
+    activeTeam?: Team;
+    /** 待命增援。要测增援到场的用例自己传（见 reinforce.test.ts） */
+    pendingReinforcements?: PendingReinforcement[];
+  } = {},
 ): BattleState {
   return {
     map,
@@ -138,6 +159,7 @@ export function makeState(
     phase: 'playing',
     rngSeed: options.seed ?? 12345,
     rngCursor: 0,
+    pendingReinforcements: options.pendingReinforcements ?? [],
     log: [],
   };
 }

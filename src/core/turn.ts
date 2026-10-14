@@ -1,5 +1,6 @@
 import { key, terrainAt } from './grid';
 import { computeZoc } from './pathfind';
+import { arriveReinforcements } from './reinforce';
 import { livingUnitsOf } from './state';
 import type { BattlePhase, BattleState, Team, Unit } from './types';
 import { opponent, teamLabel } from './util';
@@ -43,7 +44,20 @@ export function endTurn(state: BattleState): BattleState {
   const next = opponent(state.activeTeam);
   const turn = state.activeTeam === 'enemy' ? state.turn + 1 : state.turn;
 
-  const lines: string[] = [`—— 第 ${turn} 回合 · ${teamLabel(next)}阶段 ——`];
+  const header = `—— 第 ${turn} 回合 · ${teamLabel(next)}阶段 ——`;
+
+  /**
+   * 先让增援落地，再走回复。
+   *
+   * 顺序有讲究：`arriveReinforcements` 只负责把单位放进 `units`，
+   * 而下面那段回复顺带统一重置 `done` / `moved` —— 增援单位正好一起被处理，
+   * 不会出现"新来的兵 done 是脏值"这种问题。
+   *
+   * 增援的日志行要单独取出来（`arrived.log` 比 `state.log` 多出来的部分），
+   * 因为最终日志的拼接基准是 `state.log` —— 直接拼接会把它们丢掉。
+   */
+  const arrived = arriveReinforcements(state, turn);
+  const arrivalNotes = arrived.log.slice(state.log.length);
 
   /**
    * **被敌人贴住的单位不能回复。**
@@ -57,24 +71,26 @@ export function endTurn(state: BattleState): BattleState {
    * 判据直接复用"是否处于敌方控制区" —— 「被贴住」和「在敌人相邻格」定义完全一致，
    * 没必要再造一个概念。
    */
-  const engagedZoc = computeZoc(state.map, state.units, opponent(next));
+  const engagedZoc = computeZoc(arrived.map, arrived.units, opponent(next));
 
-  const units = state.units.map((unit) => {
+  const healLines: string[] = [];
+
+  const units = arrived.units.map((unit) => {
     if (unit.team !== next) return unit;
 
-    const terrain = terrainAt(state.map, unit.pos);
+    const terrain = terrainAt(arrived.map, unit.pos);
     if (terrain.heal <= 0) {
       return { ...unit, done: false, moved: false };
     }
 
     if (engagedZoc.has(key(unit.pos))) {
-      lines.push(`${unit.name} 正与敌人交战，无法在${terrain.name}回复`);
+      healLines.push(`${unit.name} 正与敌人交战，无法在${terrain.name}回复`);
       return { ...unit, done: false, moved: false };
     }
 
     const amount = Math.min(terrain.heal, unit.maxHp - unit.hp);
     if (amount > 0) {
-      lines.push(
+      healLines.push(
         `${unit.name} 在${terrain.name}回复 ${amount} HP（${unit.hp + amount}/${unit.maxHp}）`,
       );
     }
@@ -83,10 +99,11 @@ export function endTurn(state: BattleState): BattleState {
   });
 
   return {
-    ...state,
+    ...arrived,
     units,
     activeTeam: next,
     turn,
-    log: [...state.log, ...lines],
+    /* 顺序：回合标题 → 增援到场 → 地形回复。标题在最前面，读者才知道这是新回合 */
+    log: [...state.log, header, ...arrivalNotes, ...healLines],
   };
 }

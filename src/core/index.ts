@@ -17,6 +17,7 @@ export * from './pathfind';
 export * from './rng';
 export * from './combat';
 export * from './turn';
+export * from './reinforce';
 export * from './state';
 export * from './reducer';
 export * from './ai';

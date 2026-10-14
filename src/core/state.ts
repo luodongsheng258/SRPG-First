@@ -3,9 +3,11 @@ import { statsAtLevel } from './progression';
 import type {
   BattleMap,
   BattleState,
+  PendingReinforcement,
   Scenario,
   Team,
   Unit,
+  UnitBlueprint,
   UnitDef,
   Vec2,
   WeaponDef,
@@ -26,15 +28,46 @@ function copyWeapon(weapon: WeaponDef): WeaponDef {
   return { ...weapon, range: [weapon.range[0], weapon.range[1]] };
 }
 
-export function createUnitInstance(
+interface UnitRecipe {
+  def: UnitDef;
+  weapons: WeaponDef[];
+}
+
+/**
+ * `defId` → 模板 + 武器定义。
+ *
+ * 开局布阵和增援都要用，所以独立出来 —— 两处各写一遍迟早会不一致，
+ * 而"增援引用了不存在的武器"这种错在加载期就该报出来。
+ */
+export function resolveRecipe(
+  defs: ReadonlyMap<string, UnitDef>,
+  weaponMap: ReadonlyMap<string, WeaponDef>,
+  defId: string,
+): UnitRecipe {
+  const def = defs.get(defId);
+  if (!def) throw new Error(`未知单位模板：${defId}`);
+
+  const weapons = def.weaponIds.map((id) => {
+    const weapon = weaponMap.get(id);
+    if (!weapon) throw new Error(`单位「${def.name}」携带了不存在的武器：${id}`);
+    return weapon;
+  });
+  if (weapons.length === 0) throw new Error(`单位「${def.name}」至少要携带一把武器`);
+
+  return { def, weapons };
+}
+
+/**
+ * 造一个**还没有身份**的单位（见 `UnitBlueprint`）。
+ *
+ * `createUnitInstance` 和增援都走这条路，保证"属性怎么算"只有一份实现。
+ */
+export function createBlueprint(
   def: UnitDef,
   weapons: readonly WeaponDef[],
   team: Team,
-  pos: Vec2,
-  index: number,
-  slot: string,
-  level: number = def.level,
-): Unit {
+  level: number,
+): UnitBlueprint {
   /* 等级带属性：不这么做的话"等级"只是个送经验的数字，
      而且会变成正反馈（见 statsAtLevel 的说明）。
      我方角色稍后会被名册覆盖成实际成长值，这里算的是"白板"。 */
@@ -52,16 +85,30 @@ export function createUnitInstance(
        切武器就是把 `weapon` 换成 `weapons` 里的另一把。 */
     weapon: first,
     weapons: carried,
-    id: `${team}-${def.id}-${index}`,
     defId: def.id,
-    slot,
     team,
-    pos: { x: pos.x, y: pos.y },
     hp: stats.maxHp,
     exp: 0,
     level,
     done: false,
     moved: false,
+  };
+}
+
+export function createUnitInstance(
+  def: UnitDef,
+  weapons: readonly WeaponDef[],
+  team: Team,
+  pos: Vec2,
+  index: number,
+  slot: string,
+  level: number = def.level,
+): Unit {
+  return {
+    ...createBlueprint(def, weapons, team, level),
+    id: `${team}-${def.id}-${index}`,
+    slot,
+    pos: { x: pos.x, y: pos.y },
   };
 }
 
@@ -96,19 +143,7 @@ export function createBattle(
   const ordinal = new Map<string, number>();
 
   scenario.spawns.forEach((spawn, index) => {
-    const def = defMap.get(spawn.defId);
-    if (!def) throw new Error(`未知单位模板：${spawn.defId}`);
-
-    const weapons = def.weaponIds.map((id) => {
-      const weapon = weaponMap.get(id);
-      if (!weapon) {
-        throw new Error(`单位「${def.name}」携带了不存在的武器：${id}`);
-      }
-      return weapon;
-    });
-    if (weapons.length === 0) {
-      throw new Error(`单位「${def.name}」至少要携带一把武器`);
-    }
+    const { def, weapons: carried } = resolveRecipe(defMap, weaponMap, spawn.defId);
 
     assertSpawnable(scenario.map, spawn);
 
@@ -123,7 +158,7 @@ export function createBattle(
     units.push(
       createUnitInstance(
         def,
-        weapons,
+        carried,
         spawn.team,
         { x: spawn.x, y: spawn.y },
         index,
@@ -133,6 +168,21 @@ export function createBattle(
     );
   });
 
+  /* 增援：单位在**开局就造好**，只是先不放进 units（见 UnitBlueprint 的说明）。
+     这里不校验位置是否重叠 —— 到场那一刻才找空格，因为那时棋盘早就变了。 */
+  const pendingReinforcements: PendingReinforcement[] = [];
+  for (const wave of scenario.reinforcements) {
+    for (const spawn of wave.spawns) {
+      const { def, weapons: carried } = resolveRecipe(defMap, weaponMap, spawn.defId);
+      assertSpawnable(scenario.map, spawn);
+      pendingReinforcements.push({
+        turn: wave.turn,
+        pos: { x: spawn.x, y: spawn.y },
+        blueprint: createBlueprint(def, carried, spawn.team, spawn.level ?? def.level),
+      });
+    }
+  }
+
   return {
     map: scenario.map,
     units,
@@ -141,6 +191,7 @@ export function createBattle(
     phase: 'playing',
     rngSeed: scenario.seed,
     rngCursor: 0,
+    pendingReinforcements,
     log: [`—— 第 1 回合 · ${teamLabel('player')}阶段 ——`],
   };
 }

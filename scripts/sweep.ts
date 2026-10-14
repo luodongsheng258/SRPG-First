@@ -128,7 +128,8 @@ const startedAt = Date.now();
 for (const variant of GRID) {
   const defs = patchMeleeAtk(baseDefs, variant.baseAtk);
   const spawns = buildSpawns(variant.melee);
-  const scenario: Scenario = { map: baseScenario.map, spawns, seed: 1 };
+  /* sweep 是纯粹调数值用的，不需要增援 */
+  const scenario: Scenario = { map: baseScenario.map, spawns, reinforcements: [], seed: 1 };
   const enemyTotal = spawns.filter((s) => s.team === 'enemy').length;
 
   let won = 0;

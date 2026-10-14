@@ -126,11 +126,13 @@ describe('单次打击公式', () => {
     expect(strikeProfile(map, atk, def)).toEqual({ damage: 5, hit: 55, crit: 0 });
   });
 
-  it('伤害不为负，命中被夹在 [5, 100]', () => {
+  it('伤害有下限 1、命中被夹在 [5, 100]', () => {
     const map = flatMap(5, 5);
+    /* 攻 1 打 防 99：原式是 0，但 0 伤害会让双方"互相打不动"从而永远分不出胜负
+       （实测死局见 combat.ts 的 MIN_DAMAGE 说明），所以下限是 1。 */
     const weak = makeUnit({ id: 'weak', pos: { x: 0, y: 0 }, atk: 1, skill: 0 });
     const tank = makeUnit({ id: 'tank', pos: { x: 1, y: 0 }, def: 99, spd: 99 });
-    expect(strikeProfile(map, weak, tank)).toEqual({ damage: 0, hit: 5, crit: 0 });
+    expect(strikeProfile(map, weak, tank)).toEqual({ damage: 1, hit: 5, crit: 0 });
 
     const sniper = makeUnit({ id: 'sniper', pos: { x: 0, y: 0 }, atk: 50, skill: 99 });
     const sloth = makeUnit({ id: 'sloth', pos: { x: 1, y: 0 }, def: 0, spd: 0 });
