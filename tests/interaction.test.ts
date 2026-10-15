@@ -4,11 +4,12 @@ import { applyAction, type BattleState, type Vec2 } from '../src/core';
 import {
   computeHighlights,
   computeThreatZone,
+  cycleSkillChoice,
   resolveClick,
   type ClickContext,
   type UiMode,
 } from '../src/game/interaction';
-import { flatMap, makeRangedUnit, makeState, makeUnit } from './fixtures';
+import { flatMap, makeRangedUnit, makeState, makeUnit, testSkill } from './fixtures';
 
 /**
  * 交互层的测试。
@@ -430,5 +431,56 @@ describe('控制区（ZOC）在界面上的表现', () => {
 
     const highlights = computeHighlights(makeState(map, [hero, far]), hero);
     expect(highlights.zocStopKeys.size).toBe(0);
+  });
+});
+
+/**
+ * 战技循环。
+ *
+ * ⚠️ 这一组测试的存在本身就是一次教训：这段逻辑原来写在 `BattleScene` 里，
+ * 用 `findIndex` 找"当前选项"时，当前是普通攻击（`currentId === null`）的话
+ * 条件 `s.id === null` 永远不成立 → 返回 −1 → `(−1 + 1) % 选项数 = 0`
+ * → 又选回 `null`。**结果是按多少次 Q 都停在普通攻击**，
+ * 而 Scene 里的 UI 逻辑单测覆盖不到，直到玩家报上来才发现。
+ *
+ * 现在它是纯函数，下面第一条用例就是那个 bug 的回归测试。
+ */
+describe('战技循环 cycleSkillChoice', () => {
+  const heavy = testSkill({ id: 'heavy', name: '重击' });
+  const aim = testSkill({ id: 'aim', name: '瞄准' });
+
+  it('**从"普通攻击"按一次必须切到第一个战技**（回归：这一步以前是空操作）', () => {
+    expect(cycleSkillChoice([heavy], null)).toBe('heavy');
+    expect(cycleSkillChoice([heavy, aim], null)).toBe('heavy');
+  });
+
+  it('在多个战技之间依次前进', () => {
+    expect(cycleSkillChoice([heavy, aim], 'heavy')).toBe('aim');
+  });
+
+  it('走完一圈回到普通攻击', () => {
+    expect(cycleSkillChoice([heavy, aim], 'aim')).toBeNull();
+    expect(cycleSkillChoice([heavy], 'heavy')).toBeNull();
+  });
+
+  it('能连按着转完整一圈（不会卡在某一格）', () => {
+    const skills = [heavy, aim];
+    let current: string | null = null;
+    const seen: (string | null)[] = [];
+
+    for (let i = 0; i < 6; i += 1) {
+      current = cycleSkillChoice(skills, current);
+      seen.push(current);
+    }
+    /* 一轮 3 格（null → heavy → aim → null…），转两圈 */
+    expect(seen).toEqual(['heavy', 'aim', null, 'heavy', 'aim', null]);
+  });
+
+  it('没有战技时恒为普通攻击', () => {
+    expect(cycleSkillChoice([], null)).toBeNull();
+  });
+
+  it('传了个不认识的 id 时从头开始，而不是卡住', () => {
+    expect(cycleSkillChoice([heavy, aim], '已经没有这个战技')).toBe('heavy');
   });
 });

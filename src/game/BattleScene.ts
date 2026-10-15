@@ -37,7 +37,7 @@ import {
 } from './feedback';
 import { FX, FxLayer, mapCenter } from './fx';
 import type { HudModel } from './hud';
-import { computeHighlights, computeThreatZone, resolveClick, type UiMode } from './interaction';
+import { computeHighlights, computeThreatZone, cycleSkillChoice, resolveClick, type UiMode } from './interaction';
 import { COLORS, FONT, TILE, tileCenter } from './theme';
 
 /**
@@ -678,13 +678,11 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
-    const options: (SkillDef | null)[] = [null, ...unit.skills];
-    const current = options.findIndex((s) => s !== null && s.id === this.pendingSkillId);
-    const next = options[(current + 1) % options.length] ?? null;
-    this.pendingSkillId = next?.id ?? null;
+    this.pendingSkillId = cycleSkillChoice(unit.skills, this.pendingSkillId);
 
     /* 买不起也让你选，但用声音明确告诉你"这个现在还不行" */
-    this.audio.play(next !== null && next.cost > unit.tp ? 'deny' : 'select');
+    const picked = this.pendingSkillId === null ? null : this.pendingSkill(unit);
+    this.audio.play(picked !== null && picked.cost > unit.tp ? 'deny' : 'select');
     this.refresh();
   }
 
@@ -1150,28 +1148,46 @@ export class BattleScene extends Phaser.Scene {
       return '琥珀色：踏进去移动就结束（敌方控制区）';
     }
 
-    if (this.uiMode === 'selecting') {
-      return this.zocStopKeys.size > 0
-        ? '点蓝格移动、点红格内的敌人攻击；琥珀色格子走进去会停下'
-        : '点蓝格移动，或直接点红格内的敌人攻击';
-    }
-    if (this.uiMode === 'moved') return '点红格内的敌人攻击，或按 Space 待机';
+    /* ⚠️ 战技提示必须排在 selecting / moved 的 return **之前**。
+       早先我把它写在后面，而选中单位时 uiMode 必然是这两者之一 ——
+       于是那段提示是**死代码**，玩家永远看不到"按 Q"。
+       实测就是这个原因之一（另一个是 cycleSkill 的下标算错）。 */
+    const art = this.skillHint();
+    if (art !== null) return art;
 
-    /* 选中了带战技的单位时，把 Q 提示出来 —— 否则玩家根本不知道有这个功能
-       （实测就是这样：功能做了、键也绑了，但没人告诉他） */
-    const picked = this.inspectedUnit();
-    if (picked !== null && picked.skills.length > 0) {
-      const art = this.pendingSkill(picked);
-      if (art === null) return '按 Q 切换战技（当前：普通攻击）';
-      return art.cost > picked.tp
-        ? `【${art.name}】TP 不足（${picked.tp}/${art.cost}）—— 按 Q 换别的`
-        : `当前战技：【${art.name}】消耗 ${art.cost} TP，不能追击`;
+    /* 没选战技时也留一句短提示，否则玩家不知道有这个功能 */
+    const unit = this.inspectedUnit();
+    const tail = unit !== null && unit.skills.length > 0 ? '，按 Q 用战技' : '';
+
+    if (this.uiMode === 'selecting') {
+      const base =
+        this.zocStopKeys.size > 0
+          ? '点蓝格移动、点红格内的敌人攻击；琥珀色格子走进去会停下'
+          : '点蓝格移动，或直接点红格内的敌人攻击';
+      return base + tail;
     }
+    if (this.uiMode === 'moved') return `点红格内的敌人攻击，或按 Space 待机${tail}`;
 
     if (livingUnitsOf(this.battle, 'player').every((u) => u.done)) {
       return '我方全部行动完毕——按 E 结束回合';
     }
     return '点击我方单位以选择';
+  }
+
+  /**
+   * 选中了带战技的单位、**而且已经选了某个战技**时的提示。
+   * 没选战技（普通攻击）时返回 `null`，交给别的提示 —— 不抢戏。
+   */
+  private skillHint(): string | null {
+    const unit = this.inspectedUnit();
+    if (unit === null || unit.skills.length === 0) return null;
+
+    const art = this.pendingSkill(unit);
+    if (art === null) return null;
+
+    return art.cost > unit.tp
+      ? `【${art.name}】TP 不足（${unit.tp} / ${art.cost}）—— 按 Q 换别的`
+      : `当前战技：【${art.name}】消耗 ${art.cost} TP、不能追击（Q 切换）`;
   }
 
   private hoveredTerrain(hoverTile: Vec2 | null): TerrainDef | null {

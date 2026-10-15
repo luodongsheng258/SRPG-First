@@ -10,7 +10,34 @@ import {
   tilesInRange,
   unitAt,
 } from '../core';
-import type { BattleState, MoveRange, Team, Unit, Vec2 } from '../core';
+import type { BattleState, MoveRange, SkillDef, Team, Unit, Vec2 } from '../core';
+
+/**
+ * 战技循环：在「普通攻击 → 各个战技 → 回到普通攻击」之间走一格。
+ *
+ * 抽成纯函数不是为了好看，是因为**它埋在 Scene 里的时候出过一次必然失效的 bug**：
+ * 用 `findIndex` 找"当前选项"时，当前是普通攻击（`currentId === null`）的话
+ * 条件 `s.id === null` 永远不成立 → 返回 −1 → `(−1 + 1) % 选项数 = 0`
+ * → 又选回 `null`。**结果是按多少次都停在普通攻击，永远切不出去**，
+ * 而 Scene 里的 UI 逻辑单测覆盖不到，直到玩家报上来才被发现。
+ *
+ * `currentId` 传的是"当前没有战技"（`null`），它的下标就是 0。
+ * 传了个不认识的 id 也按 0 处理 —— 宁可从头开始，也不要卡住。
+ */
+export function cycleSkillChoice(
+  skills: readonly SkillDef[],
+  currentId: string | null,
+): string | null {
+  if (skills.length === 0) return null;
+
+  const options: (SkillDef | null)[] = [null, ...skills];
+  const found =
+    currentId === null ? 0 : options.findIndex((s) => s !== null && s.id === currentId);
+  const current = found < 0 ? 0 : found;
+
+  const next = options[(current + 1) % options.length] ?? null;
+  return next === null ? null : next.id;
+}
 
 /**
  * 点击意图判定 —— 纯函数，可在 Node 里测。
