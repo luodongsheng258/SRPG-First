@@ -165,6 +165,17 @@ function skillCard(unit: Unit, pending: SkillDef | null): string {
     '<div class="row"><span class="k"></span>' +
       '<span class="v sub">按 Q 切换战技（○=普通攻击）</span></div>',
   );
+
+  /* 选中的战技买不起时明确说出来。
+     没有这一行的话，玩家按 Q 只看到高亮跳一下、然后什么都打不出去 ——
+     正是"功能坏了"的观感（这个坑我踩过，见 docs/rules.md 5.9）。 */
+  if (pending !== null && pending.cost > unit.tp) {
+    rows.push(
+      `<div class="row risk"><span class="k">TP 不足</span>` +
+        `<span class="v risk">还差 ${pending.cost - unit.tp} 点才能发动${esc(pending.name)}</span></div>`,
+    );
+  }
+
   return rows.join('');
 }
 

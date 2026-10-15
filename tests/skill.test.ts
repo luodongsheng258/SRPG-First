@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyAction,
+  createBlueprint,
   endTurn,
   forecast,
   planStrikes,
+  START_TP,
   strikeProfile,
   TP_ON_HIT,
   TP_PER_TURN,
@@ -20,6 +22,36 @@ import { flatMap, makeRangedUnit, makeState, makeUnit, testSkill, testWeapon } f
  */
 
 const at = (x: number, y: number) => ({ x, y });
+
+describe('开局 TP', () => {
+  it('**不能是 0** —— 否则短关卡里战技根本露不了面', () => {
+    const blueprint = createBlueprint(
+      {
+        id: 'dummy',
+        name: '测试兵',
+        unitClass: 'infantry',
+        level: 1,
+        maxHp: 20,
+        atk: 5,
+        def: 2,
+        spd: 5,
+        skill: 5,
+        mov: 4,
+        weaponIds: ['w'],
+        skillIds: [],
+        growths: { maxHp: 0, atk: 0, def: 0, spd: 0, skill: 0 },
+      },
+      { weapons: [testWeapon()], skills: [] },
+      'player',
+      1,
+    );
+
+    expect(blueprint.tp).toBe(START_TP);
+    /* 从 0 开始的话，最便宜的瞄准（15）要到第 4 回合才买得起，
+       而第一关平均只打 6.7 回合 —— 玩家按 Q 会"什么都没发生"。 */
+    expect(START_TP).toBeGreaterThanOrEqual(20);
+  });
+});
 
 describe('战技的修正', () => {
   it('威力 / 命中 / 暴击都按战技改', () => {

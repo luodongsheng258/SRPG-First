@@ -564,6 +564,16 @@ export class BattleScene extends Phaser.Scene {
         /* 相克占优时补一个确认音，让"打对了人"这件事有即时听觉反馈 */
         const attacker = this.battle.units.find((u) => u.id === intent.unitId);
         const target = this.battle.units.find((u) => u.id === intent.targetId);
+
+        /* TP 不够就别把动作派出去 —— reducer 会抛错，那对玩家来说就是崩了。
+           这里拦下来并给出明确反馈，比让他看到一张红脸好。 */
+        const art = attacker === undefined ? null : this.pendingSkill(attacker);
+        if (art !== null && attacker !== undefined && art.cost > attacker.tp) {
+          this.audio.play('deny');
+          return;
+        }
+
+        /* 相克占优时补一个确认音，让"打对了人"这件事有即时听觉反馈 */
         if (attacker && target && triangleEdge(attacker, target) === 'advantage') {
           this.audio.play('confirm');
         }
@@ -573,7 +583,7 @@ export class BattleScene extends Phaser.Scene {
           targetId: intent.targetId,
           /* 意图本身不带战技（interaction.ts 只管"点了哪一格"），
              由场景把当前选定的战技附上去 */
-          ...(this.pendingSkillId === null ? {} : { skillId: this.pendingSkillId }),
+          ...(art === null ? {} : { skillId: art.id }),
         });
         this.cancelSelection();
         return;
@@ -651,23 +661,30 @@ export class BattleScene extends Phaser.Scene {
     return unit.skills.find((s) => s.id === this.pendingSkillId) ?? null;
   }
 
-  /** `Q`：在「普通攻击 → 各个战技」之间循环。TP 不够的会跳过 */
+  /**
+   * `Q`：在「普通攻击 → 各个战技」之间循环。
+   *
+   * ⚠️ **即使一个战技都买不起，也要照常循环。**
+   * 早先的写法是"没得选就放个否定音直接返回"，结果 TP 不够时按 Q
+   * 界面上**完全没有任何变化** —— 玩家只会认为功能坏了（我第一反应就是这样）。
+   * 现在照常切，切到买不起的会在侧边栏标红提示，并按需要禁止真的打出去。
+   */
   private cycleSkill(): void {
     const unit = this.inspectedUnit();
-    if (unit === null || this.busy || unit.skills.length === 0) return;
+    if (unit === null || this.busy) return;
 
-    const usable = unit.skills.filter((s) => s.cost <= unit.tp);
-    if (usable.length === 0) {
+    if (unit.skills.length === 0) {
       this.audio.play('deny');
       return;
     }
 
-    /* 选项是 [null(普通), ...可用战技]，循环一格 */
-    const options: (SkillDef | null)[] = [null, ...usable];
+    const options: (SkillDef | null)[] = [null, ...unit.skills];
     const current = options.findIndex((s) => s !== null && s.id === this.pendingSkillId);
     const next = options[(current + 1) % options.length] ?? null;
     this.pendingSkillId = next?.id ?? null;
-    this.audio.play('select');
+
+    /* 买不起也让你选，但用声音明确告诉你"这个现在还不行" */
+    this.audio.play(next !== null && next.cost > unit.tp ? 'deny' : 'select');
     this.refresh();
   }
 
@@ -1139,6 +1156,18 @@ export class BattleScene extends Phaser.Scene {
         : '点蓝格移动，或直接点红格内的敌人攻击';
     }
     if (this.uiMode === 'moved') return '点红格内的敌人攻击，或按 Space 待机';
+
+    /* 选中了带战技的单位时，把 Q 提示出来 —— 否则玩家根本不知道有这个功能
+       （实测就是这样：功能做了、键也绑了，但没人告诉他） */
+    const picked = this.inspectedUnit();
+    if (picked !== null && picked.skills.length > 0) {
+      const art = this.pendingSkill(picked);
+      if (art === null) return '按 Q 切换战技（当前：普通攻击）';
+      return art.cost > picked.tp
+        ? `【${art.name}】TP 不足（${picked.tp}/${art.cost}）—— 按 Q 换别的`
+        : `当前战技：【${art.name}】消耗 ${art.cost} TP，不能追击`;
+    }
+
     if (livingUnitsOf(this.battle, 'player').every((u) => u.done)) {
       return '我方全部行动完毕——按 E 结束回合';
     }

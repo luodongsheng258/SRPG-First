@@ -1,5 +1,5 @@
 import { TERRAIN } from './terrain';
-import { MAX_TP, statsAtLevel } from './progression';
+import { MAX_TP, START_TP, statsAtLevel } from './progression';
 import type {
   BattleMap,
   BattleState,
@@ -95,8 +95,22 @@ export function createBlueprint(
     weapon: first,
     weapons: carried,
     skills: [...loadout.skills],
-    /* TP 每关从 0 开始（不进名册，见 Unit.tp 的说明） */
-    tp: 0,
+    /*
+     * 开局自带一点 TP，否则战技在短关卡里根本露不了面（见 START_TP 的说明）。
+     *
+     * ⚠️ **只给玩家方，敌人从 0 开始攒。** 这是一条刻意的不对称规则，理由有两条：
+     *
+     *   1. **阶段制决定了"先手资源"对人多的一方收益极大。** 敌人有 5~6 个单位
+     *      而且在同一个阶段里连续行动，人人开局 30 点 = 一次协调齐射；
+     *      玩家的 4~5 个单位是轮流动的，对不上。实测双方都给 30 点时
+     *      通关率从 44.3% 砸到 31.3%。
+     *   2. **开局就吃一轮战技齐射是糟糕的节奏** —— 玩家还没有任何机会
+     *      认识这些招，就先挨一顿。
+     *
+     * 敌人照常每回合 +5、命中 +8，所以打到第 3~4 回合它们一样会开战技，
+     * 只是不会在开场就糊脸。
+     */
+    tp: team === 'player' ? START_TP : 0,
     maxTp: MAX_TP,
     defId: def.id,
     team,
