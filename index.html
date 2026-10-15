@@ -277,6 +277,14 @@
       /* TP 不够的战技置灰 */
       #unit-info .weapon.off { opacity: 0.45; }
 
+      /* 常驻的操作提示条 */
+      .hintcard { padding: 8px 12px; }
+      #hint {
+        font-size: 12px;
+        line-height: 1.5;
+        color: #ffd166;
+      }
+
       .tpfill { height: 100%; background: #8a5cd8; }
       .muted { color: var(--dim); }
       .warn { color: var(--warn); }
@@ -366,6 +374,16 @@
           <div class="card">
             <h2>选中单位</h2>
             <div id="unit-info" class="muted">点击我方单位以选择</div>
+          </div>
+
+          <!--
+            操作提示**必须是独立的常驻元素**。
+            早先它只在"没选中、没悬停"时才被写进 #unit-info，
+            于是选好单位之后提示就消失了 —— 而"按 Q 用战技"恰恰是
+            选中单位之后才需要看到的。
+          -->
+          <div class="card hintcard">
+            <div id="hint">点击我方单位以选择</div>
           </div>
 
           <div class="card">

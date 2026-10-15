@@ -121,7 +121,7 @@ function fakeElement(tag = 'div'): any {
 const ELEMENT_IDS = [
   'menu', 'menu-title', 'menu-subtitle', 'level-list', 'menu-save-note', 'menu-reset',
   'battle', 'stage', 'fx-banner', 'hud', 'hud-menu', 'banner', 'turn', 'phase', 'objective',
-  'player-count', 'enemy-count', 'unit-info', 'forecast', 'terrain', 'threat-state',
+  'hint', 'player-count', 'enemy-count', 'unit-info', 'forecast', 'terrain', 'threat-state',
   'sfx-state', 'log', 'result', 'result-title', 'result-detail', 'result-menu', 'result-retry',
 ] as const;
 

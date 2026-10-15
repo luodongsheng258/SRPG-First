@@ -305,6 +305,7 @@ export function createHud(): Hud {
   const turnEl = pick('turn');
   const phaseEl = pick('phase');
   const objectiveEl = pick('objective');
+  const hintEl = pick('hint');
   const playerCountEl = pick('player-count');
   const enemyCountEl = pick('enemy-count');
   const unitInfoEl = pick('unit-info');
@@ -366,8 +367,13 @@ export function createHud(): Hud {
         );
       } else {
         unitInfoEl.className = 'muted';
-        unitInfoEl.textContent = model.hint;
+        unitInfoEl.textContent = '点击我方单位以选择';
       }
+
+      /* 操作提示写进**常驻**的 #hint，和上面那张卡片互不影响。
+         早先它被塞在 else 分支里，于是"选好单位之后提示就没了" ——
+         而"按 Q 用战技"恰恰是选中之后才需要看的。 */
+      hintEl.textContent = model.hint;
 
       forecastEl.innerHTML = forecastCard(model);
       terrainEl.innerHTML = terrainCard(model.hoverTerrain);
