@@ -95,12 +95,46 @@ export interface UnitDef {
    * 带两把以上的单位可以在自己回合自由切换（见 docs/rules.md 3.5）。
    */
   weaponIds: string[];
+  /** 携带的战技 id，指向 `data/skills.json`。可以为空（大多数杂兵没有战技） */
+  skillIds: string[];
   /** 升级时各项涨 1 点的概率（百分比） */
   growths: Growths;
 }
 
+/**
+ * 战技（见 docs/rules.md 5.9）。
+ *
+ * 它本质上是**一次带修正的攻击**，不是独立的一套动作系统 ——
+ * 所以走的是同一个 `attack` 动作，只是多带一个 `skillId`。
+ *
+ * ⚠️ **用战技就不能追击。** 这一条是设计核心，不是平衡旋钮：
+ * 没有它的话战技只是"资源换伤害"，永远该用；有了它，
+ * "重击 +6 威力打一下"和"普通攻击打两下"才构成真正的取舍
+ * （对高防目标前者好，对软目标后者好）。
+ */
+export interface SkillDef {
+  id: string;
+  name: string;
+  /** 给玩家看的说明，直接显示在侧边栏 */
+  desc: string;
+  /** 消耗的 TP */
+  cost: number;
+  /** 威力修正 */
+  might: number;
+  /** 命中修正 */
+  hit: number;
+  /** 暴击修正 */
+  crit: number;
+}
+
+/** 单位携带的武器与战技。造单位时一起传，避免参数列表越来越长 */
+export interface Loadout {
+  weapons: WeaponDef[];
+  skills: SkillDef[];
+}
+
 /** 战场上的单位实例 */
-export interface Unit extends Omit<UnitDef, 'id' | 'weaponIds'> {
+export interface Unit extends Omit<UnitDef, 'id' | 'weaponIds' | 'skillIds'> {
   /** 战场实例 id，例如 "player-soldier-0" */
   id: string;
   /** 指向 UnitDef.id */
@@ -136,6 +170,14 @@ export interface Unit extends Omit<UnitDef, 'id' | 'weaponIds'> {
    * 代价是每个单位多存一两把武器的字段 —— 对这个数据量完全无所谓。
    */
   weapons: WeaponDef[];
+  /** 携带的战技。空数组很常见 */
+  skills: SkillDef[];
+  /**
+   * 战技点（TP）。**每关重置，不进名册** —— 它是"这一局里的进攻资源"，
+   * 跨关累积会让后期的每一场都变成技能倾泻。
+   */
+  tp: number;
+  maxTp: number;
 }
 
 export interface BattleMap {

@@ -5,11 +5,12 @@ import {
   expFromStrike,
   hpAfterCombat,
   levelUpText,
+  TP_ON_HIT,
   type CombatReward,
 } from './progression';
 import { rollPercent } from './rng';
 import { findUnit } from './state';
-import type { BattleMap, BattleState, Unit } from './types';
+import type { BattleMap, BattleState, SkillDef, Unit } from './types';
 import { clamp } from './util';
 import {
   attackPower,
@@ -52,6 +53,14 @@ export interface StrikeProfile {
 }
 
 /**
+ * "没有用战技"时的零修正。
+ *
+ * 用一个常量而不是到处判 `skill === undefined`：公式里那三行加法不用分叉，
+ * 少一处分支就少一处和 `forecast` 对不上的可能。
+ */
+const NO_SKILL: SkillDef = { id: '', name: '', desc: '', cost: 0, might: 0, hit: 0, crit: 0 };
+
+/**
  * **每次命中至少造成 1 点伤害。**
  *
  * 这不是调味料，是"保证战斗一定收得了场"的必需品。
@@ -79,20 +88,32 @@ const MIN_DAMAGE = 1;
 /**
  * 单次打击的伤害、命中与暴击。
  * 地形加成取自**承受方所在格**——站在森林里防御更高、更难被打中。
+ *
+ * `skill` 是这一击用的战技（见 docs/rules.md 5.9）。不传就是普通攻击。
  */
-export function strikeProfile(map: BattleMap, attacker: Unit, defender: Unit): StrikeProfile {
+export function strikeProfile(
+  map: BattleMap,
+  attacker: Unit,
+  defender: Unit,
+  skill?: SkillDef,
+): StrikeProfile {
   const terrain = terrainAt(map, defender.pos);
   const edge = triangleEdge(attacker, defender);
+  const bonus = skill ?? NO_SKILL;
 
   return {
     damage: Math.max(
       MIN_DAMAGE,
-      attackPower(attacker) + triangleMight(edge) - (defender.def + terrain.defBonus),
+      attackPower(attacker) +
+        bonus.might +
+        triangleMight(edge) -
+        (defender.def + terrain.defBonus),
     ),
     hit: clamp(
       HIT_BASE +
         (attacker.skill - defender.spd) * HIT_PER_SKILL +
         attacker.weapon.hit +
+        bonus.hit +
         triangleHit(edge) -
         terrain.avoidBonus,
       HIT_MIN,
@@ -100,8 +121,9 @@ export function strikeProfile(map: BattleMap, attacker: Unit, defender: Unit): S
     ),
     /* 暴击**只看武器**，不掺技巧。掺技巧的话每次交战都要多掷一次骰，
        命中率的分布和随机游标的推进全乱，而且每加一次随机都会让
-       「同一局面必然得出同一结果」这件事更难验证。 */
-    crit: clamp(attacker.weapon.crit, 0, CRIT_MAX),
+       「同一局面必然得出同一结果」这件事更难验证。
+       战技的暴击修正是加在武器之上的 —— 它是一次性的，不改变这条性质。 */
+    crit: clamp(attacker.weapon.crit + bonus.crit, 0, CRIT_MAX),
   };
 }
 
@@ -136,9 +158,14 @@ export interface PlannedStrike {
 }
 
 /** 构建本次战斗的完整打击序列（不考虑死亡中断，中断在结算时处理） */
-export function planStrikes(map: BattleMap, attacker: Unit, defender: Unit): PlannedStrike[] {
-  const make = (from: Unit, to: Unit): PlannedStrike => {
-    const profile = strikeProfile(map, from, to);
+export function planStrikes(
+  map: BattleMap,
+  attacker: Unit,
+  defender: Unit,
+  skill?: SkillDef,
+): PlannedStrike[] {
+  const make = (from: Unit, to: Unit, art?: SkillDef): PlannedStrike => {
+    const profile = strikeProfile(map, from, to, art);
     return {
       attackerId: from.id,
       defenderId: to.id,
@@ -149,10 +176,20 @@ export function planStrikes(map: BattleMap, attacker: Unit, defender: Unit): Pla
   };
 
   const counterOk = canCounter(attacker, defender);
-  const attackerDoubles = attacker.spd - defender.spd >= DOUBLE_THRESHOLD;
+  /**
+   * **用战技就不能追击。**
+   *
+   * 这一条是设计核心而不是平衡旋钮：没有它，战技只是"花资源换伤害"，
+   * 永远该用；有了它，"重击 +6 威力打一下"和"普通攻击打两下"
+   * 才构成真正的取舍 —— 打高防目标前者好，打软目标后者好。
+   *
+   * 注意只影响**攻方**：守方的追击照旧，所以用战技也可能吃满反击。
+   */
+  const attackerDoubles =
+    skill === undefined && attacker.spd - defender.spd >= DOUBLE_THRESHOLD;
   const defenderDoubles = defender.spd - attacker.spd >= DOUBLE_THRESHOLD;
 
-  const out: PlannedStrike[] = [make(attacker, defender)];
+  const out: PlannedStrike[] = [make(attacker, defender, skill)];
   if (counterOk) out.push(make(defender, attacker));
   if (attackerDoubles) out.push(make(attacker, defender));
   if (counterOk && defenderDoubles) out.push(make(defender, attacker));
@@ -204,8 +241,9 @@ export function simulateCombat(
   defender: Unit,
   seed: number,
   cursor: number,
+  skill?: SkillDef,
 ): CombatLog {
-  const strikes = planStrikes(map, attacker, defender);
+  const strikes = planStrikes(map, attacker, defender, skill);
   const hp = new Map<string, number>([
     [attacker.id, attacker.hp],
     [defender.id, defender.hp],
@@ -329,13 +367,20 @@ export interface CombatForecast {
  * 语义是"如果双方全部命中、且都不出暴击会怎样"，所以是确定性的、不消耗随机数。
  * 暴击只作为概率显示，不计入伤害预期 —— 否则玩家会以为那是必然结果。
  */
-export function forecast(map: BattleMap, attacker: Unit, defender: Unit): CombatForecast {
+export function forecast(
+  map: BattleMap,
+  attacker: Unit,
+  defender: Unit,
+  skill?: SkillDef,
+): CombatForecast {
   const distance = manhattan(attacker.pos, defender.pos);
   const edge = triangleEdge(attacker, defender);
-  const a = strikeProfile(map, attacker, defender);
+  const a = strikeProfile(map, attacker, defender, skill);
   const counterOk = canCounter(attacker, defender);
   const c = counterOk ? strikeProfile(map, defender, attacker) : null;
-  const attackerDoubles = attacker.spd - defender.spd >= DOUBLE_THRESHOLD;
+  /* 用战技就不能追击 —— 必须和 planStrikes 保持一致，否则预测和实际结算会不符 */
+  const attackerDoubles =
+    skill === undefined && attacker.spd - defender.spd >= DOUBLE_THRESHOLD;
   const defenderDoubles = defender.spd - attacker.spd >= DOUBLE_THRESHOLD;
 
   let dHp = defender.hp;
@@ -362,11 +407,16 @@ export function forecast(map: BattleMap, attacker: Unit, defender: Unit): Combat
 /**
  * 真正执行战斗，返回**新的 state**（纯函数，不改原对象）。
  * 会推进 rngCursor 并追加日志。
+ *
+ * `skill` 是这一击用的战技。**"能不能用"由 reducer 校验，TP 结账在这里做** ——
+ * 因为"扣消耗"和"命中回复"必须基于**同一份战果**来算。
+ * 分两处做的话，回复先被 maxTp 夹住再扣消耗，会凭空少掉几点 TP。
  */
 export function resolveCombat(
   state: BattleState,
   attackerId: string,
   defenderId: string,
+  skill?: SkillDef,
 ): BattleState {
   const attacker = findUnit(state, attackerId);
   const defender = findUnit(state, defenderId);
@@ -379,7 +429,21 @@ export function resolveCombat(
     );
   }
 
-  const log = simulateCombat(state.map, attacker, defender, state.rngSeed, state.rngCursor);
+  const log = simulateCombat(
+    state.map,
+    attacker,
+    defender,
+    state.rngSeed,
+    state.rngCursor,
+    skill,
+  );
+
+  /* 每个单位这一战命中了几次 —— 攻守双方都算，奖励的是"打中"而不是"出手" */
+  const hits = new Map<string, number>();
+  for (const event of log.events) {
+    if (!event.hit) continue;
+    hits.set(event.fromId, (hits.get(event.fromId) ?? 0) + 1);
+  }
 
   const units = state.units.map((unit) => {
     if (unit.id !== attacker.id && unit.id !== defender.id) return unit;
@@ -390,7 +454,13 @@ export function resolveCombat(
     /* applyRewardStats 不碰 HP，HP 一律取 log 里那个**已含升级补血**的值。
        这样"战后 HP"只有一个来源，演出重放才能逐字节对上。 */
     const withStats = reward === undefined ? unit : applyRewardStats(unit, reward);
-    return nextHp === withStats.hp ? withStats : { ...withStats, hp: nextHp };
+
+    /* 只有攻方付战技的消耗 */
+    const cost = unit.id === attacker.id ? (skill?.cost ?? 0) : 0;
+    const nextTp = clamp(unit.tp - cost + (hits.get(unit.id) ?? 0) * TP_ON_HIT, 0, unit.maxTp);
+
+    const patched = nextHp === withStats.hp ? withStats : { ...withStats, hp: nextHp };
+    return nextTp === patched.tp ? patched : { ...patched, tp: nextTp };
   });
 
   const names = new Map(state.units.map((unit) => [unit.id, unit.name]));
@@ -403,6 +473,11 @@ export function resolveCombat(
     if (event.crit) return `${fromName} → ${toName} 【会心一击】${event.damage} 点伤害${suffix}`;
     return `${fromName} → ${toName} 造成 ${event.damage} 伤害${suffix}`;
   });
+
+  /* 战技写一行在最前面 —— 不写的话玩家只看到"伤害变高了"，不知道是战技生效 */
+  if (skill !== undefined) {
+    lines.unshift(`${attacker.name} 发动【${skill.name}】`);
+  }
 
   /* 升级单独写一行。经验值本身不写 —— 每次交战都刷两条会淹没战斗日志 */
   for (const reward of log.rewards) {

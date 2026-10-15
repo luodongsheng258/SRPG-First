@@ -2,6 +2,7 @@ import campaignRaw from '../../data/campaign.json';
 import fort01 from '../../data/maps/fort-01.json';
 import forest01 from '../../data/maps/forest-01.json';
 import plain01 from '../../data/maps/plain-01.json';
+import skillsRaw from '../../data/skills.json';
 import unitsRaw from '../../data/units.json';
 import weaponsRaw from '../../data/weapons.json';
 
@@ -10,6 +11,7 @@ import {
   createBattle,
   parseCampaign,
   parseScenario,
+  parseSkillDefs,
   parseUnitDefs,
   parseWeaponDefs,
   type BattleState,
@@ -17,6 +19,7 @@ import {
   type LevelEntry,
   type Roster,
   type Scenario,
+  type SkillDef,
   type UnitDef,
   type WeaponDef,
 } from '../core';
@@ -53,6 +56,7 @@ class LevelRegistry {
   readonly campaign: Campaign;
   readonly defs: UnitDef[];
   readonly weapons: WeaponDef[];
+  readonly skills: SkillDef[];
 
   private readonly byId = new Map<string, LoadedLevel>();
 
@@ -60,6 +64,7 @@ class LevelRegistry {
     this.campaign = parseCampaign(campaignRaw);
     this.defs = parseUnitDefs(unitsRaw);
     this.weapons = parseWeaponDefs(weaponsRaw);
+    this.skills = parseSkillDefs(skillsRaw);
 
     this.campaign.levels.forEach((entry, index) => {
       const raw = RAW_MAPS[entry.id];
@@ -110,6 +115,7 @@ class LevelRegistry {
       seed === undefined ? scenario : { ...scenario, seed },
       this.defs,
       this.weapons,
+      this.skills,
     );
     /* 名册只影响我方；敌人的等级由地图里的 spawn.level 指定 */
     return roster === undefined ? state : applyRoster(state, roster);

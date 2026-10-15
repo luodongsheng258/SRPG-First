@@ -269,6 +269,15 @@
       #unit-info .weapon.on .v { color: #ffd166; }
       #unit-info .sub { display: block; color: var(--dim); font-size: 11px; }
       #unit-info .weapon.on .sub { color: #d8b45f; }
+
+      /* 战技：选中的那把用紫色（和血条的红、经验条的蓝都区分得开） */
+      #unit-info .weapon.art-on .k,
+      #unit-info .weapon.art-on .v { color: #c08bff; }
+      #unit-info .weapon.art-on .sub { color: #9a6fd0; }
+      /* TP 不够的战技置灰 */
+      #unit-info .weapon.off { opacity: 0.45; }
+
+      .tpfill { height: 100%; background: #8a5cd8; }
       .muted { color: var(--dim); }
       .warn { color: var(--warn); }
       #log {

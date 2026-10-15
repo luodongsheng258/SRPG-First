@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import mapRaw from '../data/maps/plain-01.json';
+import skillsRaw from '../data/skills.json';
 import unitsRaw from '../data/units.json';
 import weaponsRaw from '../data/weapons.json';
 
@@ -8,6 +9,7 @@ import {
   createBattle,
   loadBattle,
   parseScenario,
+  parseSkillDefs,
   parseUnitDefs,
   parseWeaponDefs,
 } from '../src/core';
@@ -197,32 +199,33 @@ describe('建场校验', () => {
         ]),
         defs,
         weapons,
+        parseSkillDefs(skillsRaw),
       ),
     ).toThrow(/重叠/);
   });
 
   it('出生点越界 → 报错', () => {
     expect(() =>
-      createBattle(scenarioWith(spawn({ x: 9 })), defs, weapons),
+      createBattle(scenarioWith(spawn({ x: 9 })), defs, weapons, parseSkillDefs(skillsRaw)),
     ).toThrow(/越界/);
   });
 
   it('出生点落在不可通行地形 → 报错', () => {
     expect(() =>
-      createBattle(scenarioWith(spawn({ x: 1, y: 1 })), defs, weapons),
+      createBattle(scenarioWith(spawn({ x: 1, y: 1 })), defs, weapons, parseSkillDefs(skillsRaw)),
     ).toThrow(/不可通行/);
   });
 
   it('引用了不存在的单位模板 → 报错', () => {
     expect(() =>
-      createBattle(scenarioWith(spawn({ defId: 'dragon' })), defs, weapons),
+      createBattle(scenarioWith(spawn({ defId: 'dragon' })), defs, weapons, parseSkillDefs(skillsRaw)),
     ).toThrow(/未知单位模板/);
   });
 
   it('单位引用了不存在的武器 → 报错', () => {
     const broken = parseUnitDefs([{ ...GOOD_UNIT, weaponIds: ['根本没有这把剑'] }]);
     expect(() =>
-      createBattle(scenarioWith(spawn({ defId: 'dummy' })), broken, weapons),
+      createBattle(scenarioWith(spawn({ defId: 'dummy' })), broken, weapons, parseSkillDefs(skillsRaw)),
     ).toThrow(/不存在的武器/);
   });
 });
@@ -233,7 +236,7 @@ describe('loadBattle 端到端', () => {
        否则每次调整布阵都要来改这个测试。
        它真正想验证的不变式是「每个出生点都变成了正确阵营的单位」。 */
     const scenario = parseScenario(mapRaw);
-    const state = loadBattle(mapRaw, unitsRaw, weaponsRaw, 7);
+    const state = loadBattle(mapRaw, unitsRaw, weaponsRaw, skillsRaw, 7);
 
     expect(scenario.spawns.length).toBeGreaterThan(0);
     expect(state.units).toHaveLength(scenario.spawns.length);
@@ -251,7 +254,7 @@ describe('loadBattle 端到端', () => {
   });
 
   it('每个单位实例 id 唯一，hp 从满血开始，而且都装上了武器', () => {
-    const state = loadBattle(mapRaw, unitsRaw, weaponsRaw);
+    const state = loadBattle(mapRaw, unitsRaw, weaponsRaw, skillsRaw);
     expect(new Set(state.units.map((u) => u.id)).size).toBe(state.units.length);
     for (const unit of state.units) {
       expect(unit.hp).toBe(unit.maxHp);
@@ -265,7 +268,7 @@ describe('loadBattle 端到端', () => {
   });
 
   it('武器按值复制：改一个单位的武器不会影响别人', () => {
-    const state = loadBattle(mapRaw, unitsRaw, weaponsRaw);
+    const state = loadBattle(mapRaw, unitsRaw, weaponsRaw, skillsRaw);
     const first = state.units[0];
     const second = state.units[1];
     expect(first.weapon).not.toBe(second.weapon);
@@ -277,8 +280,8 @@ describe('loadBattle 端到端', () => {
   });
 
   it('两次加载得到内容相同的战场', () => {
-    expect(loadBattle(mapRaw, unitsRaw, weaponsRaw, 3)).toEqual(
-      loadBattle(mapRaw, unitsRaw, weaponsRaw, 3),
+    expect(loadBattle(mapRaw, unitsRaw, weaponsRaw, skillsRaw, 3)).toEqual(
+      loadBattle(mapRaw, unitsRaw, weaponsRaw, skillsRaw, 3),
     );
   });
 });

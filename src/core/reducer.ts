@@ -3,7 +3,7 @@ import { key, samePos } from './grid';
 import { canStandAt, computeMoveRange } from './pathfind';
 import { requireUnit } from './state';
 import { canAct, checkVictory, endTurn, victoryText } from './turn';
-import type { BattleState, Unit, Vec2 } from './types';
+import type { BattleState, SkillDef, Unit, Vec2 } from './types';
 
 /**
  * 唯一的写入口：applyAction(state, action) -> newState
@@ -17,7 +17,11 @@ import type { BattleState, Unit, Vec2 } from './types';
 
 export type Action =
   | { type: 'move'; unitId: string; to: Vec2 }
-  | { type: 'attack'; unitId: string; targetId: string }
+  /**
+   * 攻击。带上 `skillId` 就是**用战技**（见 docs/rules.md 5.9）——
+   * 战技不是独立的动作类型，它就是"一次带修正的攻击"。
+   */
+  | { type: 'attack'; unitId: string; targetId: string; skillId?: string }
   /**
    * 换武器。**不消耗行动** —— 换完还能移动和攻击（见 docs/rules.md 3.5）。
    *
@@ -95,7 +99,23 @@ function applyAttack(
     throw new Error(`${attacker.name} 的目标不在攻击范围内`);
   }
 
-  const afterCombat = resolveCombat(state, attacker.id, target.id);
+  /* "能不能用战技"归这里校验，TP 的实际结账归 resolveCombat
+     （因为它要和命中回复一起算，见那边的说明）。 */
+  let skill: SkillDef | undefined;
+  if (action.skillId !== undefined) {
+    skill = attacker.skills.find((s) => s.id === action.skillId);
+    if (!skill) {
+      const has = attacker.skills.map((s) => s.id).join(' / ') || '无';
+      throw new Error(`${attacker.name} 没有战技「${action.skillId}」（持有：${has}）`);
+    }
+    if (attacker.tp < skill.cost) {
+      throw new Error(
+        `${attacker.name} 的 TP 不足，用不了【${skill.name}】（${attacker.tp} / ${skill.cost}）`,
+      );
+    }
+  }
+
+  const afterCombat = resolveCombat(state, attacker.id, target.id, skill);
   const units = afterCombat.units.map((u) =>
     u.id === attacker.id ? { ...u, done: true, moved: true } : u,
   );

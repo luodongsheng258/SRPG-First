@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import mapRaw from '../data/maps/plain-01.json';
+import skillsRaw from '../data/skills.json';
 import unitsRaw from '../data/units.json';
 import weaponsRaw from '../data/weapons.json';
 
@@ -11,7 +12,7 @@ import { autoBattle, encodeState, loadBattle } from '../src/core';
  * 这正是"逻辑与渲染分离"最大的回报 —— 一秒钟能跑几百局。
  */
 describe('headless 自动对战', () => {
-  const build = (seed = 424242) => loadBattle(mapRaw, unitsRaw, weaponsRaw, seed);
+  const build = (seed = 424242) => loadBattle(mapRaw, unitsRaw, weaponsRaw, skillsRaw, seed);
 
   it('相同种子 → 逐字节相同的终局（可复现）', () => {
     expect(autoBattle(build(), 50)).toEqual(autoBattle(build(), 50));

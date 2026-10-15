@@ -21,6 +21,7 @@ import {
   type BattleState,
   type CombatForecast,
   type MoveRange,
+  type SkillDef,
   type TerrainDef,
   type Unit,
   type Vec2,
@@ -92,6 +93,13 @@ export class BattleScene extends Phaser.Scene {
 
   private uiMode: UiMode = 'idle';
   private selectedId: string | null = null;
+  /**
+   * 下一次攻击要用的战技。`null` = 普通攻击。
+   *
+   * 这是**纯 UI 状态**，不进 BattleState —— 它描述的是"玩家打算怎么做"，
+   * 而不是"世界现在是什么样"。真正生效是在派发攻击动作的那一刻。
+   */
+  private pendingSkillId: string | null = null;
   private hoverTile: Vec2 | null = null;
 
   private moveRange: MoveRange | null = null;
@@ -469,6 +477,8 @@ export class BattleScene extends Phaser.Scene {
       /* 换武器。数字键直接选第 N 把，Tab 循环 —— 两个都给，
          因为"我想换成第 2 把"和"我想换一把看看"是两种不同的意图。 */
       keyboard.on('keydown-TAB', () => this.cycleWeapon(1));
+      /* Q：循环选择战技（普通攻击 ↔ 各个战技） */
+      keyboard.on('keydown-Q', () => this.cycleSkill());
       for (let n = 1; n <= 9; n += 1) {
         keyboard.on(`keydown-${['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'][n - 1]}`, () =>
           this.equipWeaponAt(n - 1),
@@ -479,7 +489,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** 把当前选中单位的武器换成携带列表里的第 index 把（数字键用） */
   private equipWeaponAt(index: number): void {
-    const unit = this.selectedUnit();
+    const unit = this.inspectedUnit();
     if (unit === null || this.busy) return;
     const weapon = unit.weapons[index];
     if (weapon === undefined || weapon.id === unit.weapon.id) {
@@ -493,7 +503,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Tab：在当前武器的下一把之间循环 */
   private cycleWeapon(step: number): void {
-    const unit = this.selectedUnit();
+    const unit = this.inspectedUnit();
     if (unit === null || this.busy || unit.weapons.length < 2) return;
     const current = unit.weapons.findIndex((w) => w.id === unit.weapon.id);
     const next = unit.weapons[(current + step + unit.weapons.length) % unit.weapons.length];
@@ -557,7 +567,14 @@ export class BattleScene extends Phaser.Scene {
         if (attacker && target && triangleEdge(attacker, target) === 'advantage') {
           this.audio.play('confirm');
         }
-        this.dispatch({ type: 'attack', unitId: intent.unitId, targetId: intent.targetId });
+        this.dispatch({
+          type: 'attack',
+          unitId: intent.unitId,
+          targetId: intent.targetId,
+          /* 意图本身不带战技（interaction.ts 只管"点了哪一格"），
+             由场景把当前选定的战技附上去 */
+          ...(this.pendingSkillId === null ? {} : { skillId: this.pendingSkillId }),
+        });
         this.cancelSelection();
         return;
       }
@@ -614,9 +631,52 @@ export class BattleScene extends Phaser.Scene {
     return unit;
   }
 
+  /**
+   * 选中的单位，**不管它有没有行动完** —— 查看、换武器、选战技都要用它。
+   *
+   * ⚠️ 别把它和 `selectedUnit()` 混用。`selectedUnit()` 的语义是"这个单位还能不能接受指令"，
+   * 用它去取"当前在看的单位"会让所有针对已行动单位的功能静默失效 ——
+   * 我就在这上面栽过一次：上一版"打完还能换武器"因此根本没生效，
+   * 因为 `equipWeaponAt` 拿到的是 null，然后一声不响地 return 了。
+   */
+  private inspectedUnit(): Unit | null {
+    if (this.selectedId === null) return null;
+    const unit = this.battle.units.find((u) => u.id === this.selectedId);
+    return !unit || unit.hp <= 0 ? null : unit;
+  }
+
+  /** 当前打算用的战技。没有就是普通攻击 */
+  private pendingSkill(unit: Unit): SkillDef | null {
+    if (this.pendingSkillId === null) return null;
+    return unit.skills.find((s) => s.id === this.pendingSkillId) ?? null;
+  }
+
+  /** `Q`：在「普通攻击 → 各个战技」之间循环。TP 不够的会跳过 */
+  private cycleSkill(): void {
+    const unit = this.inspectedUnit();
+    if (unit === null || this.busy || unit.skills.length === 0) return;
+
+    const usable = unit.skills.filter((s) => s.cost <= unit.tp);
+    if (usable.length === 0) {
+      this.audio.play('deny');
+      return;
+    }
+
+    /* 选项是 [null(普通), ...可用战技]，循环一格 */
+    const options: (SkillDef | null)[] = [null, ...usable];
+    const current = options.findIndex((s) => s !== null && s.id === this.pendingSkillId);
+    const next = options[(current + 1) % options.length] ?? null;
+    this.pendingSkillId = next?.id ?? null;
+    this.audio.play('select');
+    this.refresh();
+  }
+
   private selectUnit(unit: Unit): void {
     this.selectedId = unit.id;
     this.uiMode = unit.moved ? 'moved' : 'selecting';
+    /* 换单位就清掉待用战技 —— 否则会把上一个单位的战技带过来，
+       表现为"点了这个单位却打出另一个单位的招" */
+    this.pendingSkillId = null;
     this.audio.play('select');
     this.recomputeHighlights();
     this.refresh();
@@ -1098,8 +1158,11 @@ export class BattleScene extends Phaser.Scene {
     selected: Unit,
     target: Unit,
   ): { forecast: CombatForecast; from: Vec2 } | null {
+    /* 预览必须带上"当前打算用的战技"，否则玩家看到的伤害不是实际会发生的 */
+    const art = this.pendingSkill(selected) ?? undefined;
+
     if (canReach(selected, target)) {
-      return { forecast: forecast(this.battle.map, selected, target), from: selected.pos };
+      return { forecast: forecast(this.battle.map, selected, target, art), from: selected.pos };
     }
     if (!this.moveRange) return null;
 
@@ -1110,7 +1173,7 @@ export class BattleScene extends Phaser.Scene {
       const simulated: Unit = { ...selected, pos: dest };
       if (!canReach(simulated, target)) continue;
 
-      const f = forecast(this.battle.map, simulated, target);
+      const f = forecast(this.battle.map, simulated, target, art);
       const score = f.attacker.damage - (f.counter?.damage ?? 0);
       if (score > bestScore) {
         bestScore = score;
@@ -1148,6 +1211,11 @@ export class BattleScene extends Phaser.Scene {
       activeTeam: this.battle.activeTeam,
       phase: this.battle.phase,
       objective: this.battle.objective,
+      /* 战技是纯 UI 状态，得从场景传过去 */
+      pendingSkill: (() => {
+        const unit = this.inspectedUnit();
+        return unit === null ? null : this.pendingSkill(unit);
+      })(),
       playerAlive: livingUnitsOf(this.battle, 'player').length,
       enemyAlive: livingUnitsOf(this.battle, 'enemy').length,
       selected,

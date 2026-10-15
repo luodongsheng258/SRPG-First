@@ -1,5 +1,6 @@
 import { key, terrainAt } from './grid';
 import { computeZoc } from './pathfind';
+import { TP_PER_TURN } from './progression';
 import { arriveReinforcements } from './reinforce';
 import { livingUnitsOf } from './state';
 import type { BattlePhase, BattleState, Objective, Team, Unit } from './types';
@@ -122,14 +123,19 @@ export function endTurn(state: BattleState): BattleState {
   const units = arrived.units.map((unit) => {
     if (unit.team !== next) return unit;
 
+    /* TP 恢复：只有即将行动的一方，每回合固定 +TP_PER_TURN。
+       和地形回复不同 —— 它**不看是否交战**：交战本来就另有命中回复，
+       再卡一条会让"被贴住就永远攒不出战技"，反而鼓励龟缩。 */
+    const tp = Math.min(unit.maxTp, unit.tp + TP_PER_TURN);
+
     const terrain = terrainAt(arrived.map, unit.pos);
     if (terrain.heal <= 0) {
-      return { ...unit, done: false, moved: false };
+      return { ...unit, done: false, moved: false, tp };
     }
 
     if (engagedZoc.has(key(unit.pos))) {
       healLines.push(`${unit.name} 正与敌人交战，无法在${terrain.name}回复`);
-      return { ...unit, done: false, moved: false };
+      return { ...unit, done: false, moved: false, tp };
     }
 
     const amount = Math.min(terrain.heal, unit.maxHp - unit.hp);
@@ -139,7 +145,7 @@ export function endTurn(state: BattleState): BattleState {
       );
     }
 
-    return { ...unit, done: false, moved: false, hp: unit.hp + amount };
+    return { ...unit, done: false, moved: false, tp, hp: unit.hp + amount };
   });
 
   return {

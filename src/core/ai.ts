@@ -5,7 +5,7 @@ import { computeMoveRange, reachableTiles, terrainDistanceField } from './pathfi
 import { applyAction } from './reducer';
 import type { Action } from './reducer';
 import { livingUnitsOf } from './state';
-import type { BattleMap, BattleState, Team, Unit, Vec2, WeaponDef } from './types';
+import type { BattleMap, BattleState, SkillDef, Team, Unit, Vec2, WeaponDef } from './types';
 import { opponent } from './util';
 
 /**
@@ -33,6 +33,14 @@ const W_DEATH = 2000;
 const W_WOUND = 2;
 /** 贴脸的轻微偏好，避免双方互相僵持 */
 const W_APPROACH = 1;
+/**
+ * 花 1 点 TP 的心理成本。
+ *
+ * 没有它的话 AI 会在"只好一点点"的时候把整条 TP 槽倒空 ——
+ * 局部最优但整局很蠢。权重 1 表示"省下 1 点 TP 值 0.1 点伤害"，
+ * 也就是**要赢得明显才值得开战技**。
+ */
+const W_TP = 1;
 
 /**
  * 打"全队集火目标"的额外加分。
@@ -63,6 +71,8 @@ interface AttackChoice {
   target: Unit;
   /** 用哪把武器打。和当前装备不同时，`decideUnitAction` 会先派一个 equip */
   weapon: WeaponDef;
+  /** 用哪个战技。`null` = 普通攻击 */
+  skill: SkillDef | null;
   score: number;
 }
 
@@ -138,8 +148,9 @@ function scoreAttack(
   attackerAtDest: Unit,
   foe: Unit,
   focusId: string | null,
+  skill: SkillDef | null,
 ): number {
-  const f = forecast(map, attackerAtDest, foe);
+  const f = forecast(map, attackerAtDest, foe, skill ?? undefined);
 
   let score = f.attacker.damage * W_DAMAGE;
   if (f.defenderWillDie) score += W_KILL;
@@ -149,22 +160,29 @@ function scoreAttack(
   score -= manhattan(attackerAtDest.pos, foe.pos) * W_APPROACH;
   /* 集火：全队咬住同一个目标，才咬得死 */
   if (focusId !== null && foe.id === focusId) score += W_FOCUS;
+  /* 花掉的 TP 要算进成本 —— 不然 AI 会在"只好一点点"的时候把资源全倒出去。
+     权重 1 表示"省下 1 点 TP 值 0.1 点伤害"，也就是要赢得明显才值得用。 */
+  if (skill !== null) score -= skill.cost * W_TP;
 
   return score;
 }
 
 /** 打不动还会被反杀 —— 这种交换毫无意义，不如先去推进 */
 function isPointless(state: BattleState, unit: Unit, choice: AttackChoice): boolean {
-  const sim: Unit = { ...unit, pos: { x: choice.dest.x, y: choice.dest.y }, weapon: choice.weapon };
-  const f = forecast(state.map, sim, choice.target);
+  const sim: Unit = {
+    ...unit,
+    pos: { x: choice.dest.x, y: choice.dest.y },
+    weapon: choice.weapon,
+  };
+  const f = forecast(state.map, sim, choice.target, choice.skill ?? undefined);
   return f.attackerWillDie && !f.defenderWillDie;
 }
 
 /**
- * 在给定的候选落点里，找到最优的"站在哪、用哪把武器、打谁"。
+ * 在给定的候选落点里，找到最优的"站在哪、用哪把武器、开不开战技、打谁"。
  *
- * 武器也进搜索空间 —— 这样 AI 自动会用上射程（用手斧在 2 格外白嫖）
- * 和相克（换一把克制的武器再打），不需要为它们各写一段专门的逻辑。
+ * 武器和战技都进搜索空间 —— 这样 AI 自动会用上射程、相克，
+ * 以及"打一次狠的还是打两次轻的"，不需要为它们各写一段专门逻辑。
  */
 function bestAttack(
   state: BattleState,
@@ -175,9 +193,11 @@ function bestAttack(
   const foes = livingUnitsOf(state, opponent(unit.team));
 
   /* 当前装备排在第一 —— 分数相同时它会赢，免得为了一模一样的效果白换一次武器 */
-  const loadout = [
-    unit.weapon,
-    ...unit.weapons.filter((w) => w.id !== unit.weapon.id),
+  const loadout = [unit.weapon, ...unit.weapons.filter((w) => w.id !== unit.weapon.id)];
+  /* 普通攻击排在第一 —— 分数相同时不花 TP */
+  const arts: (SkillDef | null)[] = [
+    null,
+    ...unit.skills.filter((skill) => skill.cost <= unit.tp),
   ];
 
   let best: AttackChoice | null = null;
@@ -185,10 +205,14 @@ function bestAttack(
   for (const dest of candidates) {
     for (const weapon of loadout) {
       const sim: Unit = { ...unit, pos: { x: dest.x, y: dest.y }, weapon };
-      for (const foe of foes) {
-        if (!canReach(sim, foe)) continue;
-        const score = scoreAttack(state.map, sim, foe, focusId);
-        if (best === null || score > best.score) best = { dest, target: foe, weapon, score };
+      for (const skill of arts) {
+        for (const foe of foes) {
+          if (!canReach(sim, foe)) continue;
+          const score = scoreAttack(state.map, sim, foe, focusId, skill);
+          if (best === null || score > best.score) {
+            best = { dest, target: foe, weapon, skill, score };
+          }
+        }
       }
     }
   }
@@ -263,7 +287,7 @@ export function decideUnitAction(
     if (!samePos(choice.dest, unit.pos)) {
       return { type: 'move', unitId: unit.id, to: choice.dest };
     }
-    return { type: 'attack', unitId: unit.id, targetId: choice.target.id };
+    return { type: 'attack', unitId: unit.id, targetId: choice.target.id, ...(choice.skill === null ? {} : { skillId: choice.skill.id }) };
   }
 
   if (unit.moved) return { type: 'wait', unitId: unit.id };

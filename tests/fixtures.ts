@@ -3,6 +3,7 @@ import type {
   BattleState,
   Objective,
   PendingReinforcement,
+  SkillDef,
   Team,
   TerrainKind,
   Unit,
@@ -92,6 +93,11 @@ export function makeUnit(overrides: Partial<Unit> & Pick<Unit, 'pos'>): Unit {
     mov: 4,
     weapon,
     weapons,
+    skills: overrides.skills ?? [],
+    /* TP 默认给满 —— 测战技的用例不该先花几回合攒资源；
+       要测"TP 不够"的用例自己传 tp */
+    tp: overrides.tp ?? 100,
+    maxTp: overrides.maxTp ?? 100,
     slot: 'test-unit#0',
     exp: 0,
     /* 成长率全 0：测试里不该有升级掷骰。
@@ -140,6 +146,23 @@ export function makePending(
 ): PendingReinforcement {
   const { id: _id, pos: _pos, slot: _slot, ...blueprint } = makeUnit({ ...overrides, pos });
   return { turn, pos: { x: pos.x, y: pos.y }, blueprint };
+}
+
+/**
+ * 一个"明显有取舍"的测试战技：威力 +5、命中 −10、消耗 20。
+ * 修正故意一正一负 —— 只加不减的战技退化成纯升级，测不出"该不该用"。
+ */
+export function testSkill(patch: Partial<SkillDef> = {}): SkillDef {
+  return {
+    id: 'test-art',
+    name: '测试战技',
+    desc: '测试用',
+    cost: 20,
+    might: 5,
+    hit: -10,
+    crit: 0,
+    ...patch,
+  };
 }
 
 export function makeState(

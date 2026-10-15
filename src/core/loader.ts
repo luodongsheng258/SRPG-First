@@ -9,6 +9,7 @@ import type {
   Objective,
   ReinforcementSpawn,
   Scenario,
+  SkillDef,
   Team,
   TerrainKind,
   UnitClass,
@@ -83,6 +84,7 @@ export function parseUnitDefs(raw: unknown): UnitDef[] {
       skill: num(entry.skill, `${at}.skill`),
       mov: num(entry.mov, `${at}.mov`),
       weaponIds: parseWeaponIds(entry.weaponIds, at),
+      skillIds: parseSkillIds(entry.skillIds, at),
       growths: parseGrowths(entry.growths, at),
     };
 
@@ -101,6 +103,59 @@ export function parseUnitDefs(raw: unknown): UnitDef[] {
 }
 
 const WEAPON_KINDS: readonly WeaponKind[] = ['sword', 'axe', 'lance', 'bow', 'tome'];
+
+/**
+ * 战技表（见 docs/rules.md 5.9）。
+ *
+ * 修正值允许是负数（重击就是"威力 +6、命中 −10"），这是设计的一部分：
+ * 战技靠"互有取舍"才不会退化成纯升级。
+ */
+export function parseSkillDefs(raw: unknown): SkillDef[] {
+  if (!Array.isArray(raw)) throw new Error('战技表顶层必须是数组');
+
+  const defs = raw.map((entry, i) => {
+    const at = `skills[${i}]`;
+    if (!isRecord(entry)) throw new Error(`${at} 必须是对象`);
+
+    const def: SkillDef = {
+      id: str(entry.id, `${at}.id`),
+      name: str(entry.name, `${at}.name`),
+      desc: str(entry.desc, `${at}.desc`),
+      cost: num(entry.cost, `${at}.cost`),
+      might: num(entry.might, `${at}.might`),
+      hit: num(entry.hit, `${at}.hit`),
+      crit: num(entry.crit, `${at}.crit`),
+    };
+    if (def.cost < 1) {
+      throw new Error(`${at}.cost 至少为 1 —— 免费的战技没有取舍，永远该用`);
+    }
+    if (def.might === 0 && def.hit === 0 && def.crit === 0) {
+      throw new Error(`${at} 没有任何修正，等于花 TP 做普通攻击`);
+    }
+    return def;
+  });
+
+  const seen = new Set<string>();
+  for (const def of defs) {
+    if (seen.has(def.id)) throw new Error(`战技 id 重复：${def.id}`);
+    seen.add(def.id);
+  }
+  return defs;
+}
+
+/** 携带的战技 id。可以省略（大多数杂兵没有战技） */
+function parseSkillIds(raw: unknown, at: string): string[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new Error(`${at}.skillIds 必须是数组`);
+
+  const ids = raw.map((value, i) => str(value, `${at}.skillIds[${i}]`));
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) throw new Error(`${at}.skillIds 里有重复的战技：${id}`);
+    seen.add(id);
+  }
+  return ids;
+}
 
 export function parseWeaponDefs(raw: unknown): WeaponDef[] {
   if (!Array.isArray(raw)) throw new Error('武器表顶层必须是数组');
@@ -287,11 +342,13 @@ export function loadBattle(
   mapRaw: unknown,
   unitsRaw: unknown,
   weaponsRaw: unknown,
+  skillsRaw: unknown = [],
   seedOverride?: number,
 ): BattleState {
   const defs = parseUnitDefs(unitsRaw);
   const weapons = parseWeaponDefs(weaponsRaw);
+  const skills = parseSkillDefs(skillsRaw);
   const scenario = parseScenario(mapRaw);
   if (seedOverride !== undefined) scenario.seed = seedOverride;
-  return createBattle(scenario, defs, weapons);
+  return createBattle(scenario, defs, weapons, skills);
 }

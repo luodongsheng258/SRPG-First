@@ -12,6 +12,7 @@ import {
   type Unit,
   type Vec2,
   type WeaponKind,
+  type SkillDef,
 } from '../core';
 
 /**
@@ -32,6 +33,13 @@ export interface HudModel {
   phase: BattlePhase;
   /** 本关的胜利条件，显示在回合数旁边 */
   objective: Objective;
+  /**
+   * 当前打算用的战技。`null` = 普通攻击。
+   *
+   * 它是**纯 UI 状态**（玩家"打算"怎么做），不在 BattleState 里 ——
+   * 真正生效是在派发攻击动作的那一刻。
+   */
+  pendingSkill: SkillDef | null;
 
   playerAlive: number;
   enemyAlive: number;
@@ -115,6 +123,51 @@ const KIND_LABEL: Record<WeaponKind, string> = {
   tome: '魔法',
 };
 
+/** TP 条。用的是第三种颜色（紫），和红的血、蓝的经验都区分得开 */
+function tpBar(unit: Unit): string {
+  const ratio = unit.maxTp <= 0 ? 0 : Math.max(0, Math.min(1, unit.tp / unit.maxTp));
+  return (
+    `<div class="exprow"><span class="k">TP ${unit.tp}/${unit.maxTp}</span></div>` +
+    `<div class="expbar"><div class="tpfill" style="width:${(ratio * 100).toFixed(1)}%"></div></div>`
+  );
+}
+
+/**
+ * 战技列表。
+ *
+ * 修正值正负号都写出来（"+6 / −10"）—— 战技的取舍完全建立在"换来什么、付出什么"上，
+ * 只写个名字等于让玩家瞎猜。TP 不够的会置灰。
+ */
+function skillCard(unit: Unit, pending: SkillDef | null): string {
+  if (unit.skills.length === 0) return '';
+
+  const rows = unit.skills.map((skill) => {
+    const affordable = skill.cost <= unit.tp;
+    const chosen = pending !== null && pending.id === skill.id;
+    const mark = chosen ? '●' : '○';
+    const mods = [
+      skill.might === 0 ? null : `威 ${skill.might > 0 ? '+' : ''}${skill.might}`,
+      skill.hit === 0 ? null : `中 ${skill.hit > 0 ? '+' : ''}${skill.hit}`,
+      skill.crit === 0 ? null : `暴 ${skill.crit > 0 ? '+' : ''}${skill.crit}`,
+    ]
+      .filter((part): part is string => part !== null)
+      .join(' · ');
+
+    return (
+      `<div class="row weapon${chosen ? ' art-on' : ''}${affordable ? '' : ' off'}">` +
+      `<span class="k">${mark}</span>` +
+      `<span class="v">${esc(skill.name)}<span class="sub">TP ${skill.cost} · ${mods} · 不能追击</span></span>` +
+      `</div>`
+    );
+  });
+
+  rows.push(
+    '<div class="row"><span class="k"></span>' +
+      '<span class="v sub">按 Q 切换战技（○=普通攻击）</span></div>',
+  );
+  return rows.join('');
+}
+
 /**
  * 携带的武器列表。当前装备的那把用实心圆点 + 琥珀色标出来。
  *
@@ -148,7 +201,7 @@ function weaponCard(unit: Unit): string {
   return rows.join('');
 }
 
-function unitCard(unit: Unit, label: string): string {
+function unitCard(unit: Unit, label: string, pending: SkillDef | null): string {
   const status = unit.done ? '已行动' : unit.moved ? '已移动' : '待命';
   const power = attackPower(unit);
   return [
@@ -158,7 +211,9 @@ function unitCard(unit: Unit, label: string): string {
     `<span class="v ${unit.team}">${unit.hp} / ${unit.maxHp}</span></div>`,
     hpBar(unit),
     expBar(unit),
+    tpBar(unit),
     weaponCard(unit),
+    skillCard(unit, pending),
     `<div class="row"><span class="k">攻 / 防 / 速</span><span class="v">${power} / ${unit.def} / ${unit.spd}</span></div>`,
     `<div class="row"><span class="k">状态</span><span class="v">${status}</span></div>`,
   ].join('');
@@ -292,7 +347,12 @@ export function createHud(): Hud {
       if (shown) {
         const label = model.selected ? '选中' : '光标';
         unitInfoEl.className = '';
-        unitInfoEl.innerHTML = unitCard(shown, `${label}：${shown.name}`);
+        unitInfoEl.innerHTML = unitCard(
+          shown,
+          `${label}：${shown.name}`,
+          /* 战技高亮只对**当前选中**的单位有意义 —— 光标划过的不算 */
+          model.selected !== null && model.selected.id === shown.id ? model.pendingSkill : null,
+        );
       } else {
         unitInfoEl.className = 'muted';
         unitInfoEl.textContent = model.hint;

@@ -1,10 +1,12 @@
 import { TERRAIN } from './terrain';
-import { statsAtLevel } from './progression';
+import { MAX_TP, statsAtLevel } from './progression';
 import type {
   BattleMap,
   BattleState,
+  Loadout,
   PendingReinforcement,
   Scenario,
+  SkillDef,
   Team,
   Unit,
   UnitBlueprint,
@@ -30,18 +32,19 @@ function copyWeapon(weapon: WeaponDef): WeaponDef {
 
 interface UnitRecipe {
   def: UnitDef;
-  weapons: WeaponDef[];
+  loadout: Loadout;
 }
 
 /**
- * `defId` → 模板 + 武器定义。
+ * `defId` → 模板 + 武器/战技定义。
  *
  * 开局布阵和增援都要用，所以独立出来 —— 两处各写一遍迟早会不一致，
- * 而"增援引用了不存在的武器"这种错在加载期就该报出来。
+ * 而"引用了不存在的武器/战技"这种错在加载期就该报出来。
  */
 export function resolveRecipe(
   defs: ReadonlyMap<string, UnitDef>,
   weaponMap: ReadonlyMap<string, WeaponDef>,
+  skillMap: ReadonlyMap<string, SkillDef>,
   defId: string,
 ): UnitRecipe {
   const def = defs.get(defId);
@@ -54,7 +57,13 @@ export function resolveRecipe(
   });
   if (weapons.length === 0) throw new Error(`单位「${def.name}」至少要携带一把武器`);
 
-  return { def, weapons };
+  const skills = def.skillIds.map((id) => {
+    const skill = skillMap.get(id);
+    if (!skill) throw new Error(`单位「${def.name}」携带了不存在的战技：${id}`);
+    return skill;
+  });
+
+  return { def, loadout: { weapons, skills } };
 }
 
 /**
@@ -64,7 +73,7 @@ export function resolveRecipe(
  */
 export function createBlueprint(
   def: UnitDef,
-  weapons: readonly WeaponDef[],
+  loadout: Loadout,
   team: Team,
   level: number,
 ): UnitBlueprint {
@@ -73,7 +82,7 @@ export function createBlueprint(
      我方角色稍后会被名册覆盖成实际成长值，这里算的是"白板"。 */
   const stats = statsAtLevel(def, level);
 
-  const carried = weapons.map(copyWeapon);
+  const carried = loadout.weapons.map(copyWeapon);
   const first = carried[0];
   if (first === undefined) throw new Error(`单位「${def.name}」没有携带任何武器`);
 
@@ -85,6 +94,10 @@ export function createBlueprint(
        切武器就是把 `weapon` 换成 `weapons` 里的另一把。 */
     weapon: first,
     weapons: carried,
+    skills: [...loadout.skills],
+    /* TP 每关从 0 开始（不进名册，见 Unit.tp 的说明） */
+    tp: 0,
+    maxTp: MAX_TP,
     defId: def.id,
     team,
     hp: stats.maxHp,
@@ -97,7 +110,7 @@ export function createBlueprint(
 
 export function createUnitInstance(
   def: UnitDef,
-  weapons: readonly WeaponDef[],
+  loadout: Loadout,
   team: Team,
   pos: Vec2,
   index: number,
@@ -105,7 +118,7 @@ export function createUnitInstance(
   level: number = def.level,
 ): Unit {
   return {
-    ...createBlueprint(def, weapons, team, level),
+    ...createBlueprint(def, loadout, team, level),
     id: `${team}-${def.id}-${index}`,
     slot,
     pos: { x: pos.x, y: pos.y },
@@ -134,16 +147,18 @@ export function createBattle(
   scenario: Scenario,
   defs: readonly UnitDef[],
   weapons: readonly WeaponDef[],
+  skills: readonly SkillDef[] = [],
 ): BattleState {
   const defMap = new Map(defs.map((d) => [d.id, d]));
   const weaponMap = new Map(weapons.map((w) => [w.id, w]));
+  const skillMap = new Map(skills.map((s) => [s.id, s]));
   const units: Unit[] = [];
   const occupied = new Set<string>();
   /* 同一个兵种出现的第几次。用来生成跨关卡稳定的槽位名 */
   const ordinal = new Map<string, number>();
 
   scenario.spawns.forEach((spawn, index) => {
-    const { def, weapons: carried } = resolveRecipe(defMap, weaponMap, spawn.defId);
+    const { def, loadout } = resolveRecipe(defMap, weaponMap, skillMap, spawn.defId);
 
     assertSpawnable(scenario.map, spawn);
 
@@ -158,7 +173,7 @@ export function createBattle(
     units.push(
       createUnitInstance(
         def,
-        carried,
+        loadout,
         spawn.team,
         { x: spawn.x, y: spawn.y },
         index,
@@ -173,12 +188,12 @@ export function createBattle(
   const pendingReinforcements: PendingReinforcement[] = [];
   for (const wave of scenario.reinforcements) {
     for (const spawn of wave.spawns) {
-      const { def, weapons: carried } = resolveRecipe(defMap, weaponMap, spawn.defId);
+      const { def, loadout } = resolveRecipe(defMap, weaponMap, skillMap, spawn.defId);
       assertSpawnable(scenario.map, spawn);
       pendingReinforcements.push({
         turn: wave.turn,
         pos: { x: spawn.x, y: spawn.y },
-        blueprint: createBlueprint(def, carried, spawn.team, spawn.level ?? def.level),
+        blueprint: createBlueprint(def, loadout, spawn.team, spawn.level ?? def.level),
       });
     }
   }

@@ -11,6 +11,7 @@
     "skill": 6,
     "mov": 5,
     "weaponIds": ["iron-sword"],
+    "skillIds": ["heavy-blow"],
     "growths": { "maxHp": 70, "atk": 45, "def": 35, "spd": 45, "skill": 50 }
   },
   {
@@ -25,6 +26,7 @@
     "skill": 7,
     "mov": 5,
     "weaponIds": ["short-bow", "long-bow"],
+    "skillIds": ["aimed-shot"],
     "growths": { "maxHp": 55, "atk": 40, "def": 25, "spd": 55, "skill": 60 }
   },
   {
@@ -39,6 +41,7 @@
     "skill": 5,
     "mov": 7,
     "weaponIds": ["iron-lance"],
+    "skillIds": ["heavy-blow"],
     "growths": { "maxHp": 80, "atk": 50, "def": 50, "spd": 25, "skill": 40 }
   },
   {
@@ -53,6 +56,7 @@
     "skill": 8,
     "mov": 4,
     "weaponIds": ["fire-tome"],
+    "skillIds": ["deadly-strike"],
     "growths": { "maxHp": 45, "atk": 55, "def": 15, "spd": 40, "skill": 60 }
   },
   {
@@ -67,6 +71,7 @@
     "skill": 5,
     "mov": 4,
     "weaponIds": ["iron-axe"],
+    "skillIds": ["heavy-blow"],
     "growths": { "maxHp": 60, "atk": 45, "def": 25, "spd": 40, "skill": 40 }
   },
   {
@@ -81,6 +86,7 @@
     "skill": 5,
     "mov": 4,
     "weaponIds": ["iron-lance"],
+    "skillIds": [],
     "growths": { "maxHp": 60, "atk": 45, "def": 30, "spd": 40, "skill": 45 }
   },
   {
@@ -95,6 +101,7 @@
     "skill": 5,
     "mov": 4,
     "weaponIds": ["short-bow"],
+    "skillIds": ["aimed-shot"],
     "growths": { "maxHp": 55, "atk": 40, "def": 25, "spd": 50, "skill": 45 }
   },
   {
@@ -109,6 +116,7 @@
     "skill": 6,
     "mov": 5,
     "weaponIds": ["steel-lance"],
+    "skillIds": ["heavy-blow", "deadly-strike"],
     "growths": { "maxHp": 75, "atk": 50, "def": 40, "spd": 45, "skill": 45 }
   },
   {
@@ -123,6 +131,7 @@
     "skill": 6,
     "mov": 4,
     "weaponIds": ["dark-tome"],
+    "skillIds": ["deadly-strike"],
     "growths": { "maxHp": 50, "atk": 50, "def": 20, "spd": 40, "skill": 50 }
   }
 ]

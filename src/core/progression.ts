@@ -47,6 +47,23 @@ export const MAX_EXP_LEVEL_GAP = 5;
 
 export const STAT_KEYS: readonly StatKey[] = ['maxHp', 'atk', 'def', 'spd', 'skill'];
 
+/* ---------------------------------------------------------------- 战技点 */
+
+/**
+ * 战技点（TP）上限。
+ *
+ * 和 `MAX_LEVEL` 一样，这个数字决定"一局能用几次战技"：
+ * 100 点配上 15~25 的消耗 ≈ 每局 4~6 次，分布在整场而不是一口气放完。
+ */
+export const MAX_TP = 100;
+
+/** 自己回合开始时，每个我方单位恢复的 TP */
+export const TP_PER_TURN = 5;
+
+/** 命中一次恢复的 TP。**只奖命中不奖出手** —— 否则乱打也能攒资源 */
+export const TP_ON_HIT = 8;
+
+
 export function statsOf(unit: Unit): Stats {
   return {
     maxHp: unit.maxHp,
